@@ -523,13 +523,52 @@ class ApiService {
   /// GET /videos/{videoId}/stream
   static Future<Map<String, dynamic>> streamVideo(int videoId) async {
     try {
+      final url = '$baseUrl/videos/$videoId/stream';
+      final headers = await authHeaders;
+      
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('📹 Stream Video API Request');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('URL: $url');
+      print('Method: GET');
+      print('Headers: ${headers.keys.join(", ")}');
+      print('Auth Token Present: ${headers['Authorization'] != null}');
+      
       final response = await http.get(
-        Uri.parse('$baseUrl/videos/$videoId/stream'),
-        headers: await authHeaders,
+        Uri.parse(url),
+        headers: headers,
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw Exception('Request timeout after 30 seconds');
+        },
       );
       
-      return _handleResponse(response);
-    } catch (e) {
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('📥 Stream Video API Response');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('Status Code: ${response.statusCode}');
+      print('Response Body Length: ${response.body.length} bytes');
+      print('Response Body Preview: ${response.body.substring(0, response.body.length > 200 ? 200 : response.body.length)}...');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      
+      final result = _handleResponse(response);
+      
+      if (result['success'] == false) {
+        print('❌ API Error: ${result['message']}');
+      } else {
+        print('✅ API Success');
+      }
+      
+      return result;
+    } catch (e, stackTrace) {
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('❌ Stream Video Exception');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('Error: $e');
+      print('Stack Trace: $stackTrace');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      
       return {
         'success': false,
         'message': 'Network error: ${e.toString()}',
