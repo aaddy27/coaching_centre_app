@@ -307,6 +307,336 @@ class ApiService {
     }
   }
   
+  // ==================== Course APIs ====================
+  
+  /// Get All Courses (Public)
+  /// GET /courses
+  static Future<Map<String, dynamic>> getAllCourses() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/courses'),
+        headers: headers,
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw Exception('Connection timeout. Please check your internet connection.');
+        },
+      );
+      
+      return _handleResponse(response);
+    } catch (e) {
+      print('getAllCourses Error Details: $e');
+      return {
+        'success': false,
+        'message': 'Network error: ${e.toString()}',
+      };
+    }
+  }
+  
+  /// Get Course Details by Slug (Public)
+  /// GET /courses/{slug}
+  static Future<Map<String, dynamic>> getCourseBySlug(String slug) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/courses/$slug'),
+        headers: headers,
+      );
+      
+      return _handleResponse(response);
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Network error: ${e.toString()}',
+      };
+    }
+  }
+  
+  /// Get My Enrolled Courses (Protected)
+  /// GET /my-courses
+  static Future<Map<String, dynamic>> getMyCourses() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/my-courses'),
+        headers: await authHeaders,
+      );
+      
+      return _handleResponse(response);
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Network error: ${e.toString()}',
+      };
+    }
+  }
+  
+  /// Get Course Subjects with Video Count (Protected)
+  /// GET /courses/{courseId}/subjects
+  static Future<Map<String, dynamic>> getCourseSubjects(int courseId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/courses/$courseId/subjects'),
+        headers: await authHeaders,
+      );
+      
+      return _handleResponse(response);
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Network error: ${e.toString()}',
+      };
+    }
+  }
+  
+  /// Get Course Videos (Protected)
+  /// GET /courses/{courseId}/videos
+  /// Note: API returns all videos for a course, we filter by subject on client side
+  static Future<Map<String, dynamic>> getSubjectVideos({
+    required int courseId,
+    required int subjectId,
+    String? filter, // unwatched, watched, in_progress
+    String? sort, // order, duration, -duration, title
+  }) async {
+    try {
+      // According to API docs, endpoint is /courses/{courseId}/videos
+      String url = '$baseUrl/courses/$courseId/videos';
+      
+      // Add query parameters
+      List<String> queryParams = [];
+      if (filter != null) queryParams.add('filter=$filter');
+      if (sort != null) queryParams.add('sort=$sort');
+      
+      if (queryParams.isNotEmpty) {
+        url += '?${queryParams.join('&')}';
+      }
+      
+      print('Fetching videos from: $url');
+      
+      final response = await http.get(
+        Uri.parse(url),
+        headers: await authHeaders,
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw Exception('Connection timeout');
+        },
+      );
+      
+      print('Videos API Response Status: ${response.statusCode}');
+      
+      final result = _handleResponse(response);
+      
+      // Filter videos by subject on client side
+      if (result['success'] == true && result['data'] != null) {
+        final videosData = result['data']['videos'] as List?;
+        if (videosData != null) {
+          // Filter videos that belong to this subject
+          final filteredVideos = videosData.where((video) {
+            final videoSubject = video['subject'];
+            return videoSubject != null && videoSubject['id'] == subjectId;
+          }).toList();
+          
+          print('Total videos: ${videosData.length}, Filtered for subject $subjectId: ${filteredVideos.length}');
+          
+          return {
+            'success': true,
+            'message': result['message'],
+            'data': {
+              'course': result['data']['course'],
+              'videos': filteredVideos,
+            },
+          };
+        }
+      }
+      
+      return result;
+    } catch (e) {
+      print('getSubjectVideos Error: $e');
+      return {
+        'success': false,
+        'message': 'Network error: ${e.toString()}',
+      };
+    }
+  }
+  
+  /// Get Course Curriculum (All subjects with videos) (Protected)
+  /// GET /courses/{courseId}/curriculum
+  static Future<Map<String, dynamic>> getCourseCurriculum(int courseId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/courses/$courseId/curriculum'),
+        headers: await authHeaders,
+      );
+      
+      return _handleResponse(response);
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Network error: ${e.toString()}',
+      };
+    }
+  }
+  
+  /// Get Subject Statistics (Protected)
+  /// GET /courses/{courseId}/subjects/{subjectId}/stats
+  static Future<Map<String, dynamic>> getSubjectStats({
+    required int courseId,
+    required int subjectId,
+  }) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/courses/$courseId/subjects/$subjectId/stats'),
+        headers: await authHeaders,
+      );
+      
+      return _handleResponse(response);
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Network error: ${e.toString()}',
+      };
+    }
+  }
+  
+  /// Search Videos in Subject (Protected)
+  /// GET /courses/{courseId}/subjects/{subjectId}/videos/search
+  static Future<Map<String, dynamic>> searchVideosInSubject({
+    required int courseId,
+    required int subjectId,
+    required String query,
+  }) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/courses/$courseId/subjects/$subjectId/videos/search?q=$query'),
+        headers: await authHeaders,
+      );
+      
+      return _handleResponse(response);
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Network error: ${e.toString()}',
+      };
+    }
+  }
+  
+  /// Stream Video (Protected)
+  /// GET /videos/{videoId}/stream
+  static Future<Map<String, dynamic>> streamVideo(int videoId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/videos/$videoId/stream'),
+        headers: await authHeaders,
+      );
+      
+      return _handleResponse(response);
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Network error: ${e.toString()}',
+      };
+    }
+  }
+  
+  /// Update Video Progress (Protected)
+  /// POST /videos/{videoId}/progress
+  static Future<Map<String, dynamic>> updateVideoProgress({
+    required int videoId,
+    required int progress, // 0-100
+    required int watchedSeconds,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/videos/$videoId/progress'),
+        headers: await authHeaders,
+        body: jsonEncode({
+          'progress': progress,
+          'watched_seconds': watchedSeconds,
+        }),
+      );
+      
+      return _handleResponse(response);
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Network error: ${e.toString()}',
+      };
+    }
+  }
+  
+  // ==================== Test Series APIs ====================
+  
+  /// Get All Tests (Public)
+  /// GET /tests
+  static Future<Map<String, dynamic>> getAllTests() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/tests'),
+        headers: headers,
+      );
+      
+      return _handleResponse(response);
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Network error: ${e.toString()}',
+      };
+    }
+  }
+  
+  /// Get Test Details (Public)
+  /// GET /tests/{testId}
+  static Future<Map<String, dynamic>> getTestDetails(int testId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/tests/$testId'),
+        headers: headers,
+      );
+      
+      return _handleResponse(response);
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Network error: ${e.toString()}',
+      };
+    }
+  }
+  
+  /// Get My Test Attempts (Protected)
+  /// GET /my-attempts
+  static Future<Map<String, dynamic>> getMyAttempts() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/my-attempts'),
+        headers: await authHeaders,
+      );
+      
+      return _handleResponse(response);
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Network error: ${e.toString()}',
+      };
+    }
+  }
+  
+  /// Start Test Attempt (Protected)
+  /// POST /tests/{testId}/start
+  static Future<Map<String, dynamic>> startTest(int testId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/tests/$testId/start'),
+        headers: await authHeaders,
+      );
+      
+      return _handleResponse(response);
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Network error: ${e.toString()}',
+      };
+    }
+  }
+  
   // ==================== Helper Methods ====================
   
   /// Handle HTTP response

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'includes/main_layout.dart';
 import 'screens/profile_screen.dart';
+import 'screens/my_courses_screen.dart';
+import 'screens/courses_screen.dart';
+import 'screens/tests_screen.dart';
 import 'registration/login_screen.dart';
 import 'services/api_service.dart';
 
@@ -17,14 +20,15 @@ class _MainScreenState extends State<MainScreen> {
   // List of screens for bottom navigation
   final List<Widget> _screens = [
     const HomeContent(),
-    const CoursesPlaceholder(),
+    const CoursesScreen(),
+    const MyCoursesScreen(),
     const ProfileScreen(),
-    const SettingsPlaceholder(),
+    const TestsScreen(),
   ];
 
   void _onNavItemTapped(int index) async {
     // Check if user is trying to access profile
-    if (index == 2) {
+    if (index == 3) {
       final isLoggedIn = await ApiService.isLoggedIn();
       
       if (!mounted) return;
@@ -700,57 +704,4 @@ class CourseCard {
     required this.students,
     required this.rating,
   });
-}
-
-// Placeholder widgets for other tabs
-class CoursesPlaceholder extends StatelessWidget {
-  const CoursesPlaceholder({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.book_rounded, size: 64, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          Text(
-            'Courses',
-            style: TextStyle(fontSize: 20, color: Colors.grey[600]),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Coming Soon',
-            style: TextStyle(fontSize: 14, color: Colors.grey[500]),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class SettingsPlaceholder extends StatelessWidget {
-  const SettingsPlaceholder({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.settings_rounded, size: 64, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          Text(
-            'Settings',
-            style: TextStyle(fontSize: 20, color: Colors.grey[600]),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Coming Soon',
-            style: TextStyle(fontSize: 14, color: Colors.grey[500]),
-          ),
-        ],
-      ),
-    );
-  }
 }
