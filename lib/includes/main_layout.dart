@@ -63,6 +63,7 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
     return AppBar(
       elevation: 0,
       backgroundColor: Colors.white,
+      automaticallyImplyLeading: false, // Prevents back button from showing
       toolbarHeight: isTablet ? 80 : (isLargePhone ? 70 : 65),
       title: Row(
         children: [

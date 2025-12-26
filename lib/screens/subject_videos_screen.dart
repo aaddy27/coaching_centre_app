@@ -332,6 +332,7 @@ class _SubjectVideosScreenState extends State<SubjectVideosScreen> {
                 return _VideoCard(
                   video: _videos[index],
                   onTap: () {
+                    // Allow playing all videos (user has purchased the course)
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -433,7 +434,7 @@ class _VideoCard extends StatelessWidget {
                         ),
                       ),
                     
-                    // Play Icon
+                    // Play Icon for all videos
                     Positioned.fill(
                       child: Center(
                         child: Container(
@@ -469,6 +470,7 @@ class _VideoCard extends StatelessWidget {
                           ),
                         ),
                       ),
+
                   ],
                 ),
                 const SizedBox(width: 12),
@@ -545,27 +547,7 @@ class _VideoCard extends StatelessWidget {
                       // Status Badges
                       Row(
                         children: [
-                          if (video.isFree == true)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF00B894).withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: const Text(
-                                'FREE',
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF00B894),
-                                ),
-                              ),
-                            ),
-                          if (video.isPreview == true) ...[
-                            const SizedBox(width: 4),
+                          if (video.isPreview == true)
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 6,
@@ -584,7 +566,6 @@ class _VideoCard extends StatelessWidget {
                                 ),
                               ),
                             ),
-                          ],
                         ],
                       ),
                     ],

@@ -68,63 +68,60 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with TickerProv
       // Check if course is free
       final isFree = widget.course.price == 0;
       
-      if (isFree) {
-        // For free courses, show subjects from course data directly
-        if (widget.course.subjects != null && widget.course.subjects!.isNotEmpty) {
-          // Convert CourseSubject to Subject for display
-          setState(() {
-            _subjects = widget.course.subjects!.map((courseSubject) {
-              return Subject(
-                id: courseSubject.id,
-                name: courseSubject.name,
-                slug: courseSubject.slug,
-                description: courseSubject.description,
-                totalVideos: 0, // Will be loaded when user clicks
-                totalDuration: null,
-                completedVideos: 0,
-                progressPercentage: 0,
-                thumbnail: null,
-                order: 0,
-              );
-            }).toList();
-            _isEnrolled = true; // Treat as enrolled for free courses
-            _isLoading = false;
-          });
-          _headerAnimationController.forward();
-          _contentAnimationController.forward();
-          return;
-        }
-      }
-      
-      // For paid courses, check enrollment
-      final isLoggedIn = await ApiService.isLoggedIn();
-      
-      if (!isLoggedIn) {
+      // First, try to use subjects from course data if available
+      if (widget.course.subjects != null && widget.course.subjects!.isNotEmpty) {
+        // Convert CourseSubject to Subject for display
         setState(() {
-          _isEnrolled = false;
+          _subjects = widget.course.subjects!.map((courseSubject) {
+            return Subject(
+              id: courseSubject.id,
+              name: courseSubject.name,
+              slug: courseSubject.slug,
+              description: courseSubject.description,
+              totalVideos: 0, // Will be loaded when user clicks
+              totalDuration: null,
+              completedVideos: 0,
+              progressPercentage: 0,
+              thumbnail: null,
+              order: 0,
+            );
+          }).toList();
+          _isEnrolled = isFree; // Free courses are auto-enrolled
           _isLoading = false;
         });
         _headerAnimationController.forward();
         _contentAnimationController.forward();
         return;
       }
+      
+      // If no subjects in course data, try to load from API
+      final isLoggedIn = await ApiService.isLoggedIn();
+      
+      // Try to load subjects from API (works for both enrolled and non-enrolled)
+      try {
+        final response = await ApiService.getCourseSubjects(widget.course.id);
 
-      // Try to load subjects (will fail if not enrolled)
-      final response = await ApiService.getCourseSubjects(widget.course.id);
-
-      if (response['success'] == true) {
-        final List<dynamic> subjectsData = response['data']['subjects'] ?? [];
-        setState(() {
-          _subjects = subjectsData.map((json) => Subject.fromJson(json)).toList();
-          _isEnrolled = true;
-          _isLoading = false;
-        });
-      } else {
+        if (response['success'] == true) {
+          final List<dynamic> subjectsData = response['data']['subjects'] ?? [];
+          setState(() {
+            _subjects = subjectsData.map((json) => Subject.fromJson(json)).toList();
+            _isEnrolled = isLoggedIn; // Mark as enrolled if logged in
+            _isLoading = false;
+          });
+        } else {
+          setState(() {
+            _isEnrolled = false;
+            _isLoading = false;
+          });
+        }
+      } catch (e) {
+        // If API fails, still show not enrolled state
         setState(() {
           _isEnrolled = false;
           _isLoading = false;
         });
       }
+      
       _headerAnimationController.forward();
       _contentAnimationController.forward();
     } catch (e) {
@@ -547,7 +544,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with TickerProv
           ),
 
           // Subjects Section
-          if (_isEnrolled) ...[ 
+          if (_subjects.isNotEmpty) ...[
             Padding(
               padding: EdgeInsets.fromLTRB(horizontalPadding, 0, horizontalPadding, 16),
               child: Row(
@@ -602,8 +599,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with TickerProv
             ),
             _buildSubjectsList(),
             const SizedBox(height: 20),
-          ] else if (!_isLoading) ...[
-            // Not Enrolled Message
+          ] else if (!_isLoading && _subjects.isEmpty) ...[
+            // Not Enrolled Message (only show if no subjects available)
             Container(
               margin: EdgeInsets.symmetric(
                 horizontal: horizontalPadding,

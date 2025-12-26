@@ -3,8 +3,6 @@ import 'dart:math' as math;
 import '../services/api_service.dart';
 import '../models/course.dart';
 import 'course_detail_screen.dart';
-import 'network_diagnostic_screen.dart';
-import 'api_test_screen.dart';
 
 class CoursesScreen extends StatefulWidget {
   const CoursesScreen({Key? key}) : super(key: key);
@@ -745,30 +743,6 @@ class _CoursesScreenState extends State<CoursesScreen> with TickerProviderStateM
                     elevation: 0,
                   ),
                 ),
-                const SizedBox(width: 12),
-                OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const NetworkDiagnosticScreen(),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.network_check_rounded),
-                  label: const Text('Diagnostics'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF6366F1),
-                    side: const BorderSide(color: Color(0xFF6366F1), width: 2),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 28,
-                      vertical: 16,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                ),
               ],
             ),
           ],
@@ -909,7 +883,26 @@ class _PremiumCourseCardState extends State<_PremiumCourseCard> with SingleTicke
                                 Image.network(
                                   widget.course.thumbnailPath ?? widget.course.thumbnail!,
                                   fit: BoxFit.cover,
+                                  loadingBuilder: (context, child, loadingProgress) {
+                                    if (loadingProgress == null) return child;
+                                    return Container(
+                                      color: Colors.grey[200],
+                                      child: Center(
+                                        child: CircularProgressIndicator(
+                                          value: loadingProgress.expectedTotalBytes != null
+                                              ? loadingProgress.cumulativeBytesLoaded /
+                                                  loadingProgress.expectedTotalBytes!
+                                              : null,
+                                          valueColor: const AlwaysStoppedAnimation<Color>(
+                                            Color(0xFF6366F1),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
                                   errorBuilder: (context, error, stackTrace) {
+                                    print('Error loading thumbnail: $error');
+                                    print('Thumbnail URL: ${widget.course.thumbnailPath ?? widget.course.thumbnail}');
                                     return _buildPlaceholder();
                                   },
                                 ),

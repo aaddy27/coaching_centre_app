@@ -3,7 +3,6 @@ import '../services/api_service.dart';
 import '../registration/login_screen.dart';
 import 'edit_profile_screen.dart';
 import 'change_password_screen.dart';
-import 'video_api_test_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -340,28 +339,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       'Sign out from your account',
                       Colors.red,
                       _handleLogout,
-                    ),
-                  ]),
-                  
-                  const SizedBox(height: 24),
-                  
-                  // Developer Tools
-                  _buildSectionTitle('Developer Tools'),
-                  const SizedBox(height: 12),
-                  _buildActionCard([
-                    _buildActionTile(
-                      Icons.bug_report_outlined,
-                      'Video API Test',
-                      'Test video streaming API and diagnose errors',
-                      Colors.purple,
-                      () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const VideoApiTestScreen(),
-                          ),
-                        );
-                      },
                     ),
                   ]),
                   

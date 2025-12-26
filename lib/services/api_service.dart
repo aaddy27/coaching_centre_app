@@ -51,7 +51,7 @@ class ApiService {
   
   // ==================== Authentication APIs ====================
   
-  /// Register new user
+  /// Register new user - Step 1: Send OTP
   /// POST /auth/register
   static Future<Map<String, dynamic>> register({
     required String name,
@@ -68,6 +68,31 @@ class ApiService {
           'phone': phone,
           'password': password,
           'password_confirmation': passwordConfirmation,
+        }),
+      );
+      
+      return _handleResponse(response);
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Network error: ${e.toString()}',
+      };
+    }
+  }
+  
+  /// Verify Registration OTP - Step 2: Complete Registration
+  /// POST /auth/verify-registration-otp
+  static Future<Map<String, dynamic>> verifyRegistrationOtp({
+    required String phone,
+    required String otp,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/auth/verify-registration-otp'),
+        headers: headers,
+        body: jsonEncode({
+          'phone': phone,
+          'otp': otp,
         }),
       );
       
@@ -533,6 +558,13 @@ class ApiService {
       print('Method: GET');
       print('Headers: ${headers.keys.join(", ")}');
       print('Auth Token Present: ${headers['Authorization'] != null}');
+      if (headers['Authorization'] != null) {
+        final token = headers['Authorization']!;
+        final maskedToken = token.length > 20 
+            ? '${token.substring(0, 20)}...${token.substring(token.length - 10)}'
+            : token;
+        print('Authorization Header: $maskedToken');
+      }
       
       final response = await http.get(
         Uri.parse(url),

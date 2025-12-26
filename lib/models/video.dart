@@ -44,6 +44,18 @@ class Video {
   });
 
   factory Video.fromJson(Map<String, dynamic> json) {
+    // Auto-detect video type from URL if not provided
+    String videoType = json['video_type'] ?? 'upload';
+    final videoUrl = json['video_url'] as String?;
+    
+    if (videoType == 'upload' && videoUrl != null) {
+      if (videoUrl.contains('youtube.com') || videoUrl.contains('youtu.be')) {
+        videoType = 'youtube';
+      } else if (videoUrl.contains('vimeo.com')) {
+        videoType = 'vimeo';
+      }
+    }
+    
     return Video(
       id: json['id'] ?? 0,
       title: json['title'] ?? '',
@@ -53,8 +65,8 @@ class Video {
       durationSeconds: json['duration_seconds'],
       sizeMb: json['size_mb']?.toDouble(),
       thumbnail: json['thumbnail'],
-      videoType: json['video_type'] ?? 'upload',
-      videoUrl: json['video_url'],
+      videoType: videoType,
+      videoUrl: videoUrl,
       vimeoId: json['vimeo_id'],
       youtubeId: json['youtube_id'],
       isPreview: json['is_preview'],
