@@ -7,11 +7,15 @@ import 'video_player_screen.dart';
 class SubjectVideosScreen extends StatefulWidget {
   final int courseId;
   final Subject subject;
+  final bool isEnrolled;
+  final double coursePrice;
 
   const SubjectVideosScreen({
     Key? key,
     required this.courseId,
     required this.subject,
+    required this.isEnrolled,
+    required this.coursePrice,
   }) : super(key: key);
 
   @override
@@ -149,6 +153,54 @@ class _SubjectVideosScreenState extends State<SubjectVideosScreen> {
         activeColor: const Color(0xFF6C5CE7),
       ),
       selected: isSelected,
+    );
+  }
+
+  void _showPurchaseDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Row(
+            children: const [
+              Icon(Icons.lock_outline, color: Color(0xFF6366F1)),
+              SizedBox(width: 12),
+              Text('Video Locked'),
+            ],
+          ),
+          content: const Text(
+            'Purchase this course to unlock all videos and learning materials.',
+            style: TextStyle(fontSize: 15),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: const Text('Purchase feature coming soon!'),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF6366F1),
+              ),
+              child: const Text('Purchase Course'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -329,18 +381,27 @@ class _SubjectVideosScreenState extends State<SubjectVideosScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: _videos.length,
               itemBuilder: (context, index) {
+                final video = _videos[index];
+                final isFree = widget.coursePrice == 0;
+                final canPlay = widget.isEnrolled || isFree || (video.isPreview == true);
+                
                 return _VideoCard(
-                  video: _videos[index],
+                  video: video,
+                  isLocked: !canPlay,
                   onTap: () {
-                    // Allow playing all videos (user has purchased the course)
+                    if (!canPlay) {
+                      _showPurchaseDialog(context);
+                      return;
+                    }
+                    
                     Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (context) => VideoPlayerScreen(
-                          video: _videos[index],
+                          video: video,
                         ),
                       ),
-                    ).then((_) => _loadVideos()); // Refresh on return
+                    ).then((_) => _loadVideos());
                   },
                 );
               },
@@ -355,10 +416,12 @@ class _SubjectVideosScreenState extends State<SubjectVideosScreen> {
 class _VideoCard extends StatelessWidget {
   final Video video;
   final VoidCallback onTap;
+  final bool isLocked;
 
   const _VideoCard({
     required this.video,
     required this.onTap,
+    this.isLocked = false,
   });
 
   @override
@@ -434,18 +497,20 @@ class _VideoCard extends StatelessWidget {
                         ),
                       ),
                     
-                    // Play Icon for all videos
+                    // Play/Lock Icon
                     Positioned.fill(
                       child: Center(
                         child: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.9),
+                            color: isLocked 
+                                ? Colors.black.withOpacity(0.7)
+                                : Colors.white.withOpacity(0.9),
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(
-                            Icons.play_arrow,
-                            color: Color(0xFF6C5CE7),
+                          child: Icon(
+                            isLocked ? Icons.lock : Icons.play_arrow,
+                            color: isLocked ? Colors.white : const Color(0xFF6C5CE7),
                             size: 24,
                           ),
                         ),

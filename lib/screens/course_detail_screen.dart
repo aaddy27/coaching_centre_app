@@ -78,7 +78,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with TickerProv
               name: courseSubject.name,
               slug: courseSubject.slug,
               description: courseSubject.description,
-              totalVideos: 0, // Will be loaded when user clicks
+              totalVideos: courseSubject.videosCount ?? 0, // Map videos_count from API
               totalDuration: null,
               completedVideos: 0,
               progressPercentage: 0,
@@ -755,6 +755,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with TickerProv
           child: _PremiumSubjectCard(
             subject: _subjects[index],
             courseId: widget.course.id,
+            isEnrolled: _isEnrolled,
+            coursePrice: widget.course.price,
           ),
         );
       },
@@ -765,10 +767,14 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with TickerProv
 class _PremiumSubjectCard extends StatefulWidget {
   final Subject subject;
   final int courseId;
+  final bool isEnrolled;
+  final double coursePrice;
 
   const _PremiumSubjectCard({
     required this.subject,
     required this.courseId,
+    required this.isEnrolled,
+    required this.coursePrice,
   });
 
   @override
@@ -799,6 +805,8 @@ class _PremiumSubjectCardState extends State<_PremiumSubjectCard> {
         color: Colors.transparent,
         child: InkWell(
           onTap: () {
+            // Always navigate to videos screen
+            // Video locking will be handled in the SubjectVideosScreen
             Navigator.push(
               context,
               PageRouteBuilder(
@@ -806,6 +814,8 @@ class _PremiumSubjectCardState extends State<_PremiumSubjectCard> {
                     SubjectVideosScreen(
                   courseId: widget.courseId,
                   subject: widget.subject,
+                  isEnrolled: widget.isEnrolled,
+                  coursePrice: widget.coursePrice,
                 ),
                 transitionsBuilder: (context, animation, secondaryAnimation, child) {
                   return FadeTransition(

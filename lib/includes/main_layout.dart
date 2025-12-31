@@ -46,7 +46,7 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FD),
+      backgroundColor: const Color(0xFFF0F4FF),
       appBar: _buildModernAppBar(),
       body: widget.child,
       floatingActionButton: _buildModernFAB(),
@@ -62,26 +62,37 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
     
     return AppBar(
       elevation: 0,
-      backgroundColor: Colors.white,
-      automaticallyImplyLeading: false, // Prevents back button from showing
+      flexibleSpace: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF6366F1), // Indigo
+              Color(0xFF8B5CF6), // Purple
+              Color(0xFF3B82F6), // Blue
+            ],
+          ),
+        ),
+      ),
+      automaticallyImplyLeading: false,
       toolbarHeight: isTablet ? 80 : (isLargePhone ? 70 : 65),
       title: Row(
         children: [
           Container(
             padding: EdgeInsets.all(isTablet ? 12 : 10),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [
-                  Color(0xFF6366F1),
-                  Color(0xFF8B5CF6),
-                ],
-              ),
+              color: Colors.white.withOpacity(0.2),
               borderRadius: BorderRadius.circular(isTablet ? 16 : 14),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.3),
+                width: 2,
+              ),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF6366F1).withOpacity(0.3),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
@@ -102,8 +113,15 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: isTablet ? 20 : (isLargePhone ? 18 : 16),
-                    color: const Color(0xFF1E293B),
+                    color: Colors.white,
                     letterSpacing: -0.3,
+                    shadows: [
+                      Shadow(
+                        color: Colors.black.withOpacity(0.2),
+                        offset: const Offset(0, 2),
+                        blurRadius: 4,
+                      ),
+                    ],
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -113,7 +131,7 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
                     'Learn & Grow',
                     style: TextStyle(
                       fontSize: isTablet ? 12 : 11,
-                      color: const Color(0xFF64748B),
+                      color: Colors.white.withOpacity(0.9),
                       fontWeight: FontWeight.w500,
                     ),
                     maxLines: 1,
@@ -133,13 +151,17 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
             children: [
               Container(
                 decoration: BoxDecoration(
-                  color: const Color(0xFF6366F1).withOpacity(0.1),
+                  color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.3),
+                    width: 1.5,
+                  ),
                 ),
                 child: IconButton(
                   icon: const Icon(Icons.notifications_rounded),
                   iconSize: isTablet ? 24 : 22,
-                  color: const Color(0xFF6366F1),
+                  color: Colors.white,
                   onPressed: () => _showNotificationsBottomSheet(context),
                   tooltip: 'Notifications',
                   padding: EdgeInsets.all(isTablet ? 12 : 10),
@@ -160,10 +182,17 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
                     padding: EdgeInsets.all(isTablet ? 5 : 4),
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                        colors: [Color(0xFFEF4444), Color(0xFFDC2626)],
+                        colors: [Color(0xFFFF6B6B), Color(0xFFEE5A6F)],
                       ),
                       shape: BoxShape.circle,
                       border: Border.all(color: Colors.white, width: 2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFFF6B6B).withOpacity(0.5),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
                     child: Text(
                       '3',
@@ -184,13 +213,17 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
           padding: EdgeInsets.only(right: isTablet ? 20 : 16),
           child: Container(
             decoration: BoxDecoration(
-              color: const Color(0xFF10B981).withOpacity(0.1),
+              color: Colors.white.withOpacity(0.2),
               borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.3),
+                width: 1.5,
+              ),
             ),
             child: IconButton(
               icon: const Icon(Icons.search_rounded),
               iconSize: isTablet ? 24 : 22,
-              color: const Color(0xFF10B981),
+              color: Colors.white,
               onPressed: () => _showSearchSheet(context),
               tooltip: 'Search',
               padding: EdgeInsets.all(isTablet ? 12 : 10),
@@ -214,11 +247,23 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(isTablet ? 32 : 30),
+          gradient: const LinearGradient(
+            colors: [
+              Color(0xFF8B5CF6), // Purple
+              Color(0xFFEC4899), // Pink
+              Color(0xFFF59E0B), // Orange
+            ],
+          ),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF6366F1).withOpacity(0.4),
-              blurRadius: isTablet ? 24 : 20,
-              offset: Offset(0, isTablet ? 10 : 8),
+              color: const Color(0xFFEC4899).withOpacity(0.5),
+              blurRadius: isTablet ? 28 : 24,
+              offset: Offset(0, isTablet ? 12 : 10),
+            ),
+            BoxShadow(
+              color: const Color(0xFF8B5CF6).withOpacity(0.3),
+              blurRadius: isTablet ? 20 : 16,
+              offset: Offset(0, isTablet ? 8 : 6),
             ),
           ],
         ),
@@ -235,11 +280,11 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
             style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: isTablet ? 16 : (isSmallPhone ? 13 : 15),
-              letterSpacing: 0.3,
+              letterSpacing: 0.5,
             ),
           ),
           elevation: 0,
-          backgroundColor: const Color(0xFF6366F1),
+          backgroundColor: Colors.transparent,
           foregroundColor: Colors.white,
         ),
       ),
@@ -253,12 +298,20 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
     
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF6366F1), // Indigo
+            Color(0xFF8B5CF6), // Purple
+            Color(0xFF3B82F6), // Blue
+          ],
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 20,
-            offset: const Offset(0, -5),
+            color: const Color(0xFF6366F1).withOpacity(0.3),
+            blurRadius: 24,
+            offset: const Offset(0, -8),
           ),
         ],
       ),
@@ -267,7 +320,7 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
         notchMargin: isTablet ? 10 : 8,
         height: isTablet ? 75 : (isSmallPhone ? 65 : 70),
         padding: EdgeInsets.zero,
-        color: Colors.white,
+        color: Colors.transparent,
         elevation: 0,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -306,22 +359,22 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
               duration: const Duration(milliseconds: 300),
               padding: EdgeInsets.all(isTablet ? 9 : (isSmallPhone ? 5 : 7)),
               decoration: BoxDecoration(
-                gradient: isSelected
-                    ? const LinearGradient(
-                        colors: [
-                          Color(0xFF6366F1),
-                          Color(0xFF8B5CF6),
-                        ],
+                color: isSelected 
+                    ? Colors.white.withOpacity(0.25)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(isTablet ? 14 : 12),
+                border: isSelected 
+                    ? Border.all(
+                        color: Colors.white.withOpacity(0.4),
+                        width: 2,
                       )
                     : null,
-                color: isSelected ? null : Colors.transparent,
-                borderRadius: BorderRadius.circular(isTablet ? 14 : 12),
                 boxShadow: isSelected
                     ? [
                         BoxShadow(
-                          color: const Color(0xFF6366F1).withOpacity(0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
+                          color: Colors.white.withOpacity(0.2),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
                         ),
                       ]
                     : null,
@@ -329,7 +382,7 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
               child: Icon(
                 icon,
                 size: isTablet ? 25 : (isSmallPhone ? 19 : 22),
-                color: isSelected ? Colors.white : const Color(0xFF94A3B8),
+                color: isSelected ? Colors.white : Colors.white.withOpacity(0.6),
               ),
             ),
             SizedBox(height: isSmallPhone ? 1 : 3),
@@ -337,10 +390,19 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
               duration: const Duration(milliseconds: 300),
               style: TextStyle(
                 fontSize: isTablet ? 11 : (isSmallPhone ? 9 : 10),
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                color: isSelected ? const Color(0xFF6366F1) : const Color(0xFF94A3B8),
-                letterSpacing: 0.2,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected ? Colors.white : Colors.white.withOpacity(0.7),
+                letterSpacing: 0.3,
                 height: 1.0,
+                shadows: isSelected
+                    ? [
+                        Shadow(
+                          color: Colors.black.withOpacity(0.3),
+                          offset: const Offset(0, 1),
+                          blurRadius: 2,
+                        ),
+                      ]
+                    : null,
               ),
               child: Text(
                 label,
@@ -361,9 +423,23 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
       isScrollControlled: true,
       builder: (BuildContext context) {
         return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFFF0F4FF),
+                Color(0xFFFFFFFF),
+              ],
+            ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF6366F1).withOpacity(0.2),
+                blurRadius: 20,
+                offset: const Offset(0, -5),
+              ),
+            ],
           ),
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -376,7 +452,9 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Colors.grey[300],
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                    ),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -391,6 +469,13 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
                         colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
                       ),
                       borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF6366F1).withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
                     child: const Icon(
                       Icons.notifications_rounded,
@@ -411,15 +496,24 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEF4444).withOpacity(0.1),
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFFF6B6B), Color(0xFFEE5A6F)],
+                      ),
                       borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFFF6B6B).withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
                     child: const Text(
                       '3 New',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFFEF4444),
+                        color: Colors.white,
                       ),
                     ),
                   ),
@@ -569,9 +663,23 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
             bottom: MediaQuery.of(context).viewInsets.bottom,
           ),
           child: Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFFF0F4FF),
+                  Color(0xFFFFFFFF),
+                ],
+              ),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF10B981).withOpacity(0.2),
+                  blurRadius: 20,
+                  offset: const Offset(0, -5),
+                ),
+              ],
             ),
             padding: const EdgeInsets.all(24),
             child: Column(
@@ -584,7 +692,9 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
                     width: 40,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: Colors.grey[300],
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF10B981), Color(0xFF059669)],
+                      ),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -599,6 +709,13 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
                           colors: [Color(0xFF10B981), Color(0xFF059669)],
                         ),
                         borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF10B981).withOpacity(0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
                       child: const Icon(
                         Icons.search_rounded,
@@ -620,10 +737,15 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
                 const SizedBox(height: 20),
                 Container(
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFF10B981).withOpacity(0.05),
+                        const Color(0xFF059669).withOpacity(0.05),
+                      ],
+                    ),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: const Color(0xFF10B981).withOpacity(0.2),
+                      color: const Color(0xFF10B981).withOpacity(0.3),
                       width: 2,
                     ),
                   ),
@@ -647,6 +769,13 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
                             colors: [Color(0xFF10B981), Color(0xFF059669)],
                           ),
                           borderRadius: BorderRadius.circular(10),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF10B981).withOpacity(0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                         ),
                         child: const Icon(
                           Icons.arrow_forward_rounded,

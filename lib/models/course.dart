@@ -205,6 +205,7 @@ class CourseSubject {
   final String slug;
   final String? description;
   final bool isActive;
+  final int? videosCount;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -215,6 +216,7 @@ class CourseSubject {
     required this.slug,
     this.description,
     required this.isActive,
+    this.videosCount,
     this.createdAt,
     this.updatedAt,
   });
@@ -227,6 +229,9 @@ class CourseSubject {
       slug: json['slug']?.toString() ?? '',
       description: json['description']?.toString(),
       isActive: json['is_active'] == true || json['is_active'] == 1,
+      videosCount: json['videos_count'] is int 
+          ? json['videos_count'] 
+          : int.tryParse(json['videos_count']?.toString() ?? ''),
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString())
           : null,
@@ -244,6 +249,7 @@ class CourseSubject {
       'slug': slug,
       'description': description,
       'is_active': isActive,
+      'videos_count': videosCount,
       'created_at': createdAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
     };
