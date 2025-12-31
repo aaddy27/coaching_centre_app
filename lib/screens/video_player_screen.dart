@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import '../models/video.dart';
 import '../services/api_service.dart';
@@ -7,10 +6,7 @@ import '../services/api_service.dart';
 class VideoPlayerScreen extends StatefulWidget {
   final Video video;
 
-  const VideoPlayerScreen({
-    Key? key,
-    required this.video,
-  }) : super(key: key);
+  const VideoPlayerScreen({Key? key, required this.video}) : super(key: key);
 
   @override
   State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
@@ -40,7 +36,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       if (widget.video.videoUrl != null && widget.video.videoUrl!.isNotEmpty) {
         print('✅ Video URL already available: ${widget.video.videoUrl}');
         print('📹 Video Type: ${widget.video.videoType}');
-        
+
         // Create video data from existing video object
         _videoData = {
           'video': {
@@ -55,12 +51,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
             'thumbnail': widget.video.thumbnail,
             'is_preview': widget.video.isPreview,
             'status': widget.video.status,
-          }
+          },
         };
-        
+
         // Initialize player based on video type
         _initializePlayer();
-        
+
         setState(() {
           _isLoading = false;
         });
@@ -103,12 +99,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     if (videoType == 'youtube' && videoUrl != null) {
       // Extract YouTube video ID
       final videoId = YoutubePlayer.convertUrlToId(videoUrl);
-      
+
       print('   Extracted YouTube ID: $videoId');
-      
+
       if (videoId != null) {
         print('✅ Creating YouTube controller with ID: $videoId');
-        
+
         setState(() {
           _youtubeController = YoutubePlayerController(
             initialVideoId: videoId,
@@ -152,11 +148,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   Widget build(BuildContext context) {
     return YoutubePlayerBuilder(
       player: YoutubePlayer(
-        controller: _youtubeController ?? 
-          YoutubePlayerController(
-            initialVideoId: 'dQw4w9WgXcQ', // Dummy ID
-            flags: const YoutubePlayerFlags(autoPlay: false),
-          ),
+        controller:
+            _youtubeController ??
+            YoutubePlayerController(
+              initialVideoId: 'dQw4w9WgXcQ', // Dummy ID
+              flags: const YoutubePlayerFlags(autoPlay: false),
+            ),
         showVideoProgressIndicator: true,
         progressIndicatorColor: const Color(0xFF6366F1),
         progressColors: const ProgressBarColors(
@@ -184,7 +181,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     final screenWidth = MediaQuery.of(context).size.width;
     final isTablet = screenWidth > 600;
     final isLargePhone = screenWidth > 400;
-    
+
     return AppBar(
       elevation: 0,
       backgroundColor: Colors.white,
@@ -200,10 +197,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
             padding: EdgeInsets.all(isTablet ? 10 : 8),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [
-                  Color(0xFF6366F1),
-                  Color(0xFF8B5CF6),
-                ],
+                colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
               ),
               borderRadius: BorderRadius.circular(isTablet ? 14 : 12),
               boxShadow: [
@@ -337,7 +331,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
           // Video Info (directly without tabs)
           _buildInfoTab(),
-          
+
           const SizedBox(height: 24),
         ],
       ),
@@ -407,8 +401,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                       videoType == 'vimeo'
                           ? 'Loading Vimeo Player...'
                           : videoType == 'youtube'
-                              ? 'Loading YouTube Player...'
-                              : 'Loading Video Player...',
+                          ? 'Loading YouTube Player...'
+                          : 'Loading Video Player...',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 14,
@@ -425,8 +419,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       ),
     );
   }
-
-
 
   Widget _buildInfoTab() {
     return Padding(
@@ -662,10 +654,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
           const SizedBox(height: 12),
           Text(
             'Related videos will appear here',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[600],
-            ),
+            style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             textAlign: TextAlign.center,
           ),
         ],
@@ -683,19 +672,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: color.withOpacity(0.2),
-          width: 1,
-        ),
+        border: Border.all(color: color.withOpacity(0.2), width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            size: 16,
-            color: color,
-          ),
+          Icon(icon, size: 16, color: color),
           const SizedBox(width: 6),
           Text(
             label,

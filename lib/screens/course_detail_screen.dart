@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'dart:math' as math;
 import '../services/api_service.dart';
 import '../models/course.dart';
 import '../models/subject.dart';
@@ -8,16 +7,14 @@ import 'subject_videos_screen.dart';
 class CourseDetailScreen extends StatefulWidget {
   final Course course;
 
-  const CourseDetailScreen({
-    Key? key,
-    required this.course,
-  }) : super(key: key);
+  const CourseDetailScreen({Key? key, required this.course}) : super(key: key);
 
   @override
   State<CourseDetailScreen> createState() => _CourseDetailScreenState();
 }
 
-class _CourseDetailScreenState extends State<CourseDetailScreen> with TickerProviderStateMixin {
+class _CourseDetailScreenState extends State<CourseDetailScreen>
+    with TickerProviderStateMixin {
   List<Subject> _subjects = [];
   bool _isLoading = true;
   String? _errorMessage;
@@ -38,7 +35,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with TickerProv
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
-    
+
     _scrollController.addListener(() {
       if (_scrollController.offset > 180 && !_showTitle) {
         setState(() => _showTitle = true);
@@ -46,7 +43,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with TickerProv
         setState(() => _showTitle = false);
       }
     });
-    
+
     _checkEnrollmentAndLoadSubjects();
   }
 
@@ -67,9 +64,10 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with TickerProv
     try {
       // Check if course is free
       final isFree = widget.course.price == 0;
-      
+
       // First, try to use subjects from course data if available
-      if (widget.course.subjects != null && widget.course.subjects!.isNotEmpty) {
+      if (widget.course.subjects != null &&
+          widget.course.subjects!.isNotEmpty) {
         // Convert CourseSubject to Subject for display
         setState(() {
           _subjects = widget.course.subjects!.map((courseSubject) {
@@ -78,7 +76,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with TickerProv
               name: courseSubject.name,
               slug: courseSubject.slug,
               description: courseSubject.description,
-              totalVideos: courseSubject.videosCount ?? 0, // Map videos_count from API
+              totalVideos:
+                  courseSubject.videosCount ?? 0, // Map videos_count from API
               totalDuration: null,
               completedVideos: 0,
               progressPercentage: 0,
@@ -93,10 +92,10 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with TickerProv
         _contentAnimationController.forward();
         return;
       }
-      
+
       // If no subjects in course data, try to load from API
       final isLoggedIn = await ApiService.isLoggedIn();
-      
+
       // Try to load subjects from API (works for both enrolled and non-enrolled)
       try {
         final response = await ApiService.getCourseSubjects(widget.course.id);
@@ -104,7 +103,9 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with TickerProv
         if (response['success'] == true) {
           final List<dynamic> subjectsData = response['data']['subjects'] ?? [];
           setState(() {
-            _subjects = subjectsData.map((json) => Subject.fromJson(json)).toList();
+            _subjects = subjectsData
+                .map((json) => Subject.fromJson(json))
+                .toList();
             _isEnrolled = isLoggedIn; // Mark as enrolled if logged in
             _isLoading = false;
           });
@@ -121,7 +122,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with TickerProv
           _isLoading = false;
         });
       }
-      
+
       _headerAnimationController.forward();
       _contentAnimationController.forward();
     } catch (e) {
@@ -144,9 +145,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with TickerProv
         physics: const BouncingScrollPhysics(),
         slivers: [
           _buildModernAppBar(),
-          SliverToBoxAdapter(
-            child: _buildBody(),
-          ),
+          SliverToBoxAdapter(child: _buildBody()),
         ],
       ),
     );
@@ -202,7 +201,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with TickerProv
                     },
                   )
                 : _buildPlaceholder(),
-            
+
             // Gradient Overlay
             Container(
               decoration: BoxDecoration(
@@ -216,7 +215,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with TickerProv
                 ),
               ),
             ),
-            
+
             // Floating Info
             Positioned(
               bottom: 20,
@@ -302,18 +301,11 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with TickerProv
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFF6366F1),
-            const Color(0xFF8B5CF6),
-          ],
+          colors: [const Color(0xFF6366F1), const Color(0xFF8B5CF6)],
         ),
       ),
       child: const Center(
-        child: Icon(
-          Icons.school_rounded,
-          size: 100,
-          color: Colors.white,
-        ),
+        child: Icon(Icons.school_rounded, size: 100, color: Colors.white),
       ),
     );
   }
@@ -322,7 +314,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with TickerProv
     final screenWidth = MediaQuery.of(context).size.width;
     final isTablet = screenWidth > 600;
     final horizontalPadding = isTablet ? 40.0 : 20.0;
-    
+
     return FadeTransition(
       opacity: _contentAnimationController,
       child: Column(
@@ -491,10 +483,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with TickerProv
                         child: Container(
                           decoration: BoxDecoration(
                             gradient: const LinearGradient(
-                              colors: [
-                                Color(0xFF6366F1),
-                                Color(0xFF8B5CF6),
-                              ],
+                              colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
                             ),
                             borderRadius: BorderRadius.circular(16),
                             boxShadow: [
@@ -509,7 +498,9 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with TickerProv
                             onPressed: () {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: const Text('Purchase feature coming soon!'),
+                                  content: const Text(
+                                    'Purchase feature coming soon!',
+                                  ),
                                   behavior: SnackBarBehavior.floating,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
@@ -546,7 +537,12 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with TickerProv
           // Subjects Section
           if (_subjects.isNotEmpty) ...[
             Padding(
-              padding: EdgeInsets.fromLTRB(horizontalPadding, 0, horizontalPadding, 16),
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                0,
+                horizontalPadding,
+                16,
+              ),
               child: Row(
                 children: [
                   Container(
@@ -674,17 +670,16 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with TickerProv
                       width: 50,
                       height: 50,
                       child: CircularProgressIndicator(
-                        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          Color(0xFF6366F1),
+                        ),
                         strokeWidth: 3,
                       ),
                     ),
                     const SizedBox(height: 16),
                     Text(
                       'Loading course content...',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                      ),
+                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                     ),
                   ],
                 ),
@@ -700,16 +695,10 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with TickerProv
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            color.withOpacity(0.1),
-            color.withOpacity(0.05),
-          ],
+          colors: [color.withOpacity(0.1), color.withOpacity(0.05)],
         ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: color.withOpacity(0.2),
-          width: 1.5,
-        ),
+        border: Border.all(color: color.withOpacity(0.2), width: 1.5),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -732,7 +721,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with TickerProv
   Widget _buildSubjectsList() {
     final screenWidth = MediaQuery.of(context).size.width;
     final horizontalPadding = screenWidth > 600 ? 40.0 : 20.0;
-    
+
     return ListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -746,10 +735,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with TickerProv
           builder: (context, value, child) {
             return Transform.translate(
               offset: Offset(0, 20 * (1 - value)),
-              child: Opacity(
-                opacity: value,
-                child: child,
-              ),
+              child: Opacity(opacity: value, child: child),
             );
           },
           child: _PremiumSubjectCard(
@@ -812,26 +798,30 @@ class _PremiumSubjectCardState extends State<_PremiumSubjectCard> {
               PageRouteBuilder(
                 pageBuilder: (context, animation, secondaryAnimation) =>
                     SubjectVideosScreen(
-                  courseId: widget.courseId,
-                  subject: widget.subject,
-                  isEnrolled: widget.isEnrolled,
-                  coursePrice: widget.coursePrice,
-                ),
-                transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                  return FadeTransition(
-                    opacity: animation,
-                    child: SlideTransition(
-                      position: Tween<Offset>(
-                        begin: const Offset(0, 0.1),
-                        end: Offset.zero,
-                      ).animate(CurvedAnimation(
-                        parent: animation,
-                        curve: Curves.easeOut,
-                      )),
-                      child: child,
+                      courseId: widget.courseId,
+                      subject: widget.subject,
+                      isEnrolled: widget.isEnrolled,
+                      coursePrice: widget.coursePrice,
                     ),
-                  );
-                },
+                transitionsBuilder:
+                    (context, animation, secondaryAnimation, child) {
+                      return FadeTransition(
+                        opacity: animation,
+                        child: SlideTransition(
+                          position:
+                              Tween<Offset>(
+                                begin: const Offset(0, 0.1),
+                                end: Offset.zero,
+                              ).animate(
+                                CurvedAnimation(
+                                  parent: animation,
+                                  curve: Curves.easeOut,
+                                ),
+                              ),
+                          child: child,
+                        ),
+                      );
+                    },
               ),
             );
           },
@@ -1020,8 +1010,12 @@ class _PremiumSubjectCardState extends State<_PremiumSubjectCard> {
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        const Color(0xFF6366F1).withOpacity(_isHovered ? 1.0 : 0.1),
-                        const Color(0xFF8B5CF6).withOpacity(_isHovered ? 1.0 : 0.1),
+                        const Color(
+                          0xFF6366F1,
+                        ).withOpacity(_isHovered ? 1.0 : 0.1),
+                        const Color(
+                          0xFF8B5CF6,
+                        ).withOpacity(_isHovered ? 1.0 : 0.1),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(10),

@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
-import '../screens/profile_screen.dart';
 
 class MainLayout extends StatefulWidget {
   final Widget child;
   final int currentIndex;
   final Function(int) onNavItemTapped;
-  
+
   const MainLayout({
     super.key,
     required this.child,
@@ -59,7 +58,7 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
     final screenWidth = MediaQuery.of(context).size.width;
     final isTablet = screenWidth > 600;
     final isLargePhone = screenWidth > 400;
-    
+
     return AppBar(
       elevation: 0,
       flexibleSpace: Container(
@@ -174,7 +173,12 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
                   animation: _notificationController,
                   builder: (context, child) {
                     return Transform.scale(
-                      scale: 1.0 + (math.sin(_notificationController.value * 2 * math.pi) * 0.1),
+                      scale:
+                          1.0 +
+                          (math.sin(
+                                _notificationController.value * 2 * math.pi,
+                              ) *
+                              0.1),
                       child: child,
                     );
                   },
@@ -238,7 +242,7 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
     final screenWidth = MediaQuery.of(context).size.width;
     final isTablet = screenWidth > 600;
     final isSmallPhone = screenWidth < 360;
-    
+
     return ScaleTransition(
       scale: CurvedAnimation(
         parent: _fabAnimationController,
@@ -295,7 +299,7 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
     final screenWidth = MediaQuery.of(context).size.width;
     final isTablet = screenWidth > 600;
     final isSmallPhone = screenWidth < 360;
-    
+
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -325,11 +329,27 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _buildNavBarItem(Icons.home_rounded, isSmallPhone ? 'Home' : 'Home', 0),
-            _buildNavBarItem(Icons.explore_rounded, isSmallPhone ? 'Explore' : 'Explore', 1),
+            _buildNavBarItem(
+              Icons.home_rounded,
+              isSmallPhone ? 'Home' : 'Home',
+              0,
+            ),
+            _buildNavBarItem(
+              Icons.explore_rounded,
+              isSmallPhone ? 'Explore' : 'Explore',
+              1,
+            ),
             SizedBox(width: isTablet ? 70 : (isSmallPhone ? 50 : 60)),
-            _buildNavBarItem(Icons.school_rounded, isSmallPhone ? 'Courses' : 'My Courses', 2),
-            _buildNavBarItem(Icons.person_rounded, isSmallPhone ? 'Profile' : 'Profile', 3),
+            _buildNavBarItem(
+              Icons.school_rounded,
+              isSmallPhone ? 'Courses' : 'My Courses',
+              2,
+            ),
+            _buildNavBarItem(
+              Icons.person_rounded,
+              isSmallPhone ? 'Profile' : 'Profile',
+              3,
+            ),
           ],
         ),
       ),
@@ -341,7 +361,7 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
     final screenWidth = MediaQuery.of(context).size.width;
     final isTablet = screenWidth > 600;
     final isSmallPhone = screenWidth < 360;
-    
+
     return GestureDetector(
       onTap: () => widget.onNavItemTapped(index),
       child: AnimatedContainer(
@@ -359,15 +379,12 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
               duration: const Duration(milliseconds: 300),
               padding: EdgeInsets.all(isTablet ? 9 : (isSmallPhone ? 5 : 7)),
               decoration: BoxDecoration(
-                color: isSelected 
+                color: isSelected
                     ? Colors.white.withOpacity(0.25)
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(isTablet ? 14 : 12),
-                border: isSelected 
-                    ? Border.all(
-                        color: Colors.white.withOpacity(0.4),
-                        width: 2,
-                      )
+                border: isSelected
+                    ? Border.all(color: Colors.white.withOpacity(0.4), width: 2)
                     : null,
                 boxShadow: isSelected
                     ? [
@@ -382,7 +399,9 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
               child: Icon(
                 icon,
                 size: isTablet ? 25 : (isSmallPhone ? 19 : 22),
-                color: isSelected ? Colors.white : Colors.white.withOpacity(0.6),
+                color: isSelected
+                    ? Colors.white
+                    : Colors.white.withOpacity(0.6),
               ),
             ),
             SizedBox(height: isSmallPhone ? 1 : 3),
@@ -391,7 +410,9 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
               style: TextStyle(
                 fontSize: isTablet ? 11 : (isSmallPhone ? 9 : 10),
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected ? Colors.white : Colors.white.withOpacity(0.7),
+                color: isSelected
+                    ? Colors.white
+                    : Colors.white.withOpacity(0.7),
                 letterSpacing: 0.3,
                 height: 1.0,
                 shadows: isSelected
@@ -404,11 +425,7 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
                       ]
                     : null,
               ),
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+              child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
             ),
           ],
         ),
@@ -427,10 +444,7 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
             gradient: const LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [
-                Color(0xFFF0F4FF),
-                Color(0xFFFFFFFF),
-              ],
+              colors: [Color(0xFFF0F4FF), Color(0xFFFFFFFF)],
             ),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
             boxShadow: [
@@ -494,7 +508,10 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
                   ),
                   const Spacer(),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
                         colors: [Color(0xFFFF6B6B), Color(0xFFEE5A6F)],
@@ -575,19 +592,14 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
       decoration: BoxDecoration(
         color: color.withOpacity(0.05),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: color.withOpacity(0.1),
-          width: 1,
-        ),
+        border: Border.all(color: color.withOpacity(0.1), width: 1),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [color, color.withOpacity(0.8)],
-              ),
+              gradient: LinearGradient(colors: [color, color.withOpacity(0.8)]),
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
@@ -631,10 +643,7 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
               Container(
                 width: 8,
                 height: 8,
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                ),
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
               ),
               const SizedBox(height: 4),
               Text(
@@ -667,12 +676,11 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
               gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFFF0F4FF),
-                  Color(0xFFFFFFFF),
-                ],
+                colors: [Color(0xFFF0F4FF), Color(0xFFFFFFFF)],
               ),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
+              ),
               boxShadow: [
                 BoxShadow(
                   color: const Color(0xFF10B981).withOpacity(0.2),
