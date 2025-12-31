@@ -7,11 +7,12 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
   int _currentSliderIndex = 0;
   late PageController _pageController;
   late AnimationController _fadeController;
-  
+
   final List<Map<String, dynamic>> sliderItems = [
     {
       "image": "assets/images/offer1.jpg",
@@ -74,7 +75,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       vsync: this,
     );
     _fadeController.forward();
-    
+
     // Auto-scroll slider
     Future.delayed(const Duration(seconds: 5), _autoScroll);
   }
@@ -98,21 +99,23 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return MainLayout(
+      currentIndex: 0,
+      onNavItemTapped: (index) {},
       child: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
         child: Column(
           children: [
             // Hero Slider with enhanced design
             _buildHeroSlider(context, isDark),
-            
+
             // Slider indicators with animation
             _buildSliderIndicators(isDark),
-            
+
             // Section spacing
             const SizedBox(height: 32),
-            
+
             // Featured section with header
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -125,9 +128,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ],
               ),
             ),
-            
+
             const SizedBox(height: 32),
-            
+
             // Popular courses section
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -140,7 +143,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ],
               ),
             ),
-            
+
             const SizedBox(height: 26),
           ],
         ),
@@ -253,9 +256,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       },
       child: Card(
         elevation: 4,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
@@ -281,17 +282,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       children: [
                         Text(
                           "Advanced Java Programming",
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           "Master Object-Oriented Programming",
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.white.withOpacity(0.9),
-                          ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: Colors.white.withOpacity(0.9)),
                         ),
                       ],
                     ),
@@ -312,7 +313,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               const SizedBox(height: 16),
               Row(
                 children: [
-                  _buildFeatureBadge(Icons.person_outline_rounded, "4,892 Students"),
+                  _buildFeatureBadge(
+                    Icons.person_outline_rounded,
+                    "4,892 Students",
+                  ),
                   const SizedBox(width: 16),
                   _buildFeatureBadge(Icons.star_rounded, "4.9/5.0"),
                 ],
@@ -378,9 +382,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       },
       child: Card(
         elevation: 3,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
@@ -404,11 +406,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   color: Colors.white.withOpacity(0.25),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
-                  course.icon,
-                  color: Colors.white,
-                  size: 28,
-                ),
+                child: Icon(course.icon, color: Colors.white, size: 28),
               ),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -497,10 +495,7 @@ class SliderCard extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Image.asset(
-              image,
-              fit: BoxFit.cover,
-            ),
+            Image.asset(image, fit: BoxFit.cover),
             Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
