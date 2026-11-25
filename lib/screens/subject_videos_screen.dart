@@ -1,7 +1,9 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import '../services/api_service.dart';
 import '../models/subject.dart';
 import '../models/video.dart';
+import '../services/api_service.dart';
+import '../widgets/ios_components.dart';
 import 'video_player_screen.dart';
 
 class SubjectVideosScreen extends StatefulWidget {
@@ -11,12 +13,12 @@ class SubjectVideosScreen extends StatefulWidget {
   final double coursePrice;
 
   const SubjectVideosScreen({
-    Key? key,
+    super.key,
     required this.courseId,
     required this.subject,
     required this.isEnrolled,
     required this.coursePrice,
-  }) : super(key: key);
+  });
 
   @override
   State<SubjectVideosScreen> createState() => _SubjectVideosScreenState();
@@ -25,6 +27,7 @@ class SubjectVideosScreen extends StatefulWidget {
 class _SubjectVideosScreenState extends State<SubjectVideosScreen> {
   List<Video> _videos = [];
   bool _isLoading = true;
+  bool _hasPurchased = false;
   String? _errorMessage;
   String? _selectedFilter;
   String? _selectedSort;
@@ -32,6 +35,7 @@ class _SubjectVideosScreenState extends State<SubjectVideosScreen> {
   @override
   void initState() {
     super.initState();
+    _hasPurchased = widget.isEnrolled || widget.coursePrice <= 0;
     _loadVideos();
   }
 
@@ -49,592 +53,302 @@ class _SubjectVideosScreenState extends State<SubjectVideosScreen> {
         sort: _selectedSort,
       );
 
-      if (response['success'] == true) {
-        final List<dynamic> videosData = response['data']['videos'] ?? [];
+      if (!mounted) return;
+
+      if (response['success'] == true && response['data'] != null) {
+        final data = response['data'] as Map<String, dynamic>;
+        final List<dynamic> videosData = data['videos'] ?? [];
         setState(() {
+          _hasPurchased = (data['has_purchased'] == true) ||
+              widget.isEnrolled ||
+              widget.coursePrice <= 0;
           _videos = videosData.map((json) => Video.fromJson(json)).toList();
           _isLoading = false;
         });
       } else {
         setState(() {
-          _errorMessage = response['message'] ?? 'Failed to load videos';
+          _errorMessage = ApiService.extractErrorMessage(
+            response,
+            fallback: 'Failed to load videos.',
+          );
           _isLoading = false;
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _errorMessage = 'Error: ${e.toString()}';
+        _errorMessage = 'Network error: ${e.toString()}';
         _isLoading = false;
       });
     }
   }
 
   void _showFilterOptions() {
-    showModalBottomSheet(
+    showCupertinoModalPopup<void>(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Filter Videos',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1A1F36),
-                ),
-              ),
-              const SizedBox(height: 16),
-              _buildFilterOption('All Videos', null),
-              _buildFilterOption('Unwatched', 'unwatched'),
-              _buildFilterOption('Watched', 'watched'),
-              _buildFilterOption('In Progress', 'in_progress'),
-              const SizedBox(height: 20),
-              const Text(
-                'Sort By',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1A1F36),
-                ),
-              ),
-              const SizedBox(height: 16),
-              _buildSortOption('Default Order', 'order'),
-              _buildSortOption('Shortest First', 'duration'),
-              _buildSortOption('Longest First', '-duration'),
-              _buildSortOption('Title (A-Z)', 'title'),
-            ],
+      builder: (sheetCtx) => CupertinoActionSheet(
+        title: const Text('Filter & Sort Lectures'),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(sheetCtx);
+              setState(() => _selectedFilter = null);
+              _loadVideos();
+            },
+            child: Text(
+              _selectedFilter == null ? '✓ All Videos' : 'All Videos',
+            ),
           ),
-        );
-      },
-    );
-  }
-
-  Widget _buildFilterOption(String label, String? value) {
-    final isSelected = _selectedFilter == value;
-    return ListTile(
-      title: Text(label),
-      leading: Radio<String?>(
-        value: value,
-        groupValue: _selectedFilter,
-        onChanged: (val) {
-          setState(() {
-            _selectedFilter = val;
-          });
-          Navigator.pop(context);
-          _loadVideos();
-        },
-        activeColor: const Color(0xFF6C5CE7),
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(sheetCtx);
+              setState(() => _selectedFilter = 'unwatched');
+              _loadVideos();
+            },
+            child: Text(
+              _selectedFilter == 'unwatched' ? '✓ Unwatched' : 'Unwatched',
+            ),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(sheetCtx);
+              setState(() => _selectedFilter = 'watched');
+              _loadVideos();
+            },
+            child: Text(
+              _selectedFilter == 'watched' ? '✓ Watched' : 'Watched',
+            ),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(sheetCtx);
+              setState(() => _selectedSort = 'duration');
+              _loadVideos();
+            },
+            child: Text(
+              _selectedSort == 'duration'
+                  ? '✓ Shortest First'
+                  : 'Sort: Shortest First',
+            ),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          isDefaultAction: true,
+          onPressed: () => Navigator.pop(sheetCtx),
+          child: const Text('Cancel'),
+        ),
       ),
-      selected: isSelected,
     );
   }
 
-  Widget _buildSortOption(String label, String value) {
-    final isSelected = _selectedSort == value;
-    return ListTile(
-      title: Text(label),
-      leading: Radio<String>(
-        value: value,
-        groupValue: _selectedSort ?? 'order',
-        onChanged: (val) {
-          setState(() {
-            _selectedSort = val;
-          });
-          Navigator.pop(context);
-          _loadVideos();
-        },
-        activeColor: const Color(0xFF6C5CE7),
-      ),
-      selected: isSelected,
-    );
-  }
-
-  void _showPurchaseDialog(BuildContext context) {
-    showDialog(
+  void _showLockedDialog() {
+    showCupertinoDialog<void>(
       context: context,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: const Text('Lecture Locked'),
+        content: const Text(
+          'Purchase this course from the Course Details page to unlock all video lectures.',
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
           ),
-          title: Row(
-            children: const [
-              Icon(Icons.lock_outline, color: Color(0xFF6366F1)),
-              SizedBox(width: 12),
-              Text('Video Locked'),
-            ],
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              Navigator.pop(context); // Return to CourseDetailScreen to enroll
+            },
+            child: const Text('Go to Enroll'),
           ),
-          content: const Text(
-            'Purchase this course to unlock all videos and learning materials.',
-            style: TextStyle(fontSize: 15),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: const Text('Purchase feature coming soon!'),
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6366F1),
-              ),
-              child: const Text('Purchase Course'),
-            ),
-          ],
-        );
-      },
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: Colors.white,
-        iconTheme: const IconThemeData(color: Color(0xFF1A1F36)),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.subject.name,
-              style: const TextStyle(
-                color: Color(0xFF1A1F36),
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            Text(
-              '${_videos.length} Videos',
-              style: const TextStyle(
-                color: Color(0xFF6B7280),
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.filter_list),
-            onPressed: _showFilterOptions,
+      backgroundColor: IosTheme.groupedBg,
+      appBar: IosNavBar(
+        title: widget.subject.name,
+        subtitle: '${_videos.length} Videos',
+        trailing: CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: const Size(36, 36),
+          onPressed: _showFilterOptions,
+          child: const Icon(
+            CupertinoIcons.line_horizontal_3_decrease_circle,
+            color: IosTheme.primaryBlue,
+            size: 22,
           ),
-        ],
+        ),
       ),
-      body: _buildBody(),
-    );
-  }
-
-  Widget _buildBody() {
-    if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6C5CE7)),
-        ),
-      );
-    }
-
-    if (_errorMessage != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.error_outline,
-              size: 64,
-              color: Color(0xFFFF6B6B),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              _errorMessage!,
-              style: const TextStyle(
-                fontSize: 16,
-                color: Color(0xFF6B7280),
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _loadVideos,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6C5CE7),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (_videos.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.video_library_outlined,
-              size: 64,
-              color: Colors.grey[400],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No videos available',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _loadVideos,
-      color: const Color(0xFF6C5CE7),
-      child: Column(
-        children: [
-          // Subject Info Header
-          Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF6C5CE7), Color(0xFFA29BFE)],
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Progress',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
+      body: _isLoading
+          ? const Center(child: CupertinoActivityIndicator(radius: 14))
+          : _errorMessage != null
+              ? _buildError()
+              : _videos.isEmpty
+                  ? _buildEmpty()
+                  : RefreshIndicator(
+                      onRefresh: _loadVideos,
+                      color: IosTheme.primaryBlue,
+                      child: ListView.builder(
+                        physics: const BouncingScrollPhysics(
+                          parent: AlwaysScrollableScrollPhysics(),
                         ),
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _videos.length,
+                        itemBuilder: (context, index) {
+                          final video = _videos[index];
+                          final canPlay = _hasPurchased ||
+                              video.canPlay ||
+                              video.isPreview == true ||
+                              video.isFree == true;
+
+                          return _buildVideoCard(video, index, canPlay);
+                        },
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${widget.subject.completedVideos}/${widget.subject.totalVideos} Videos',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    '${widget.subject.progressPercentage}%',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
                     ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Videos List
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _videos.length,
-              itemBuilder: (context, index) {
-                final video = _videos[index];
-                final isFree = widget.coursePrice == 0;
-                final canPlay = widget.isEnrolled || isFree || (video.isPreview == true);
-                
-                return _VideoCard(
-                  video: video,
-                  isLocked: !canPlay,
-                  onTap: () {
-                    if (!canPlay) {
-                      _showPurchaseDialog(context);
-                      return;
-                    }
-                    
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => VideoPlayerScreen(
-                          video: video,
-                        ),
-                      ),
-                    ).then((_) => _loadVideos());
-                  },
-                );
-              },
-            ),
-          ),
-        ],
-      ),
     );
   }
-}
 
-class _VideoCard extends StatelessWidget {
-  final Video video;
-  final VoidCallback onTap;
-  final bool isLocked;
-
-  const _VideoCard({
-    required this.video,
-    required this.onTap,
-    this.isLocked = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildVideoCard(Video video, int index, bool canPlay) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: IosTheme.separator, width: 0.6),
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
+          onTap: () {
+            if (!canPlay) {
+              _showLockedDialog();
+              return;
+            }
+            Navigator.push(
+              context,
+              CupertinoPageRoute(
+                builder: (context) => VideoPlayerScreen(video: video),
+              ),
+            ).then((_) => _loadVideos());
+          },
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
               children: [
-                // Thumbnail
                 Stack(
+                  alignment: Alignment.center,
                   children: [
-                    Container(
-                      width: 120,
-                      height: 68,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[200],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: video.thumbnail != null
-                          ? ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.network(
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        width: 108,
+                        height: 66,
+                        color: IosTheme.groupedBg,
+                        child: video.thumbnail != null &&
+                                video.thumbnail!.isNotEmpty
+                            ? Image.network(
                                 video.thumbnail!,
                                 fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return _buildPlaceholder();
-                                },
-                              ),
-                            )
-                          : _buildPlaceholder(),
-                    ),
-                    
-                    // Duration Badge
-                    if (video.duration != null)
-                      Positioned(
-                        bottom: 4,
-                        right: 4,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.7),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            video.duration!,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    
-                    // Play/Lock Icon
-                    Positioned.fill(
-                      child: Center(
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: isLocked 
-                                ? Colors.black.withOpacity(0.7)
-                                : Colors.white.withOpacity(0.9),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            isLocked ? Icons.lock : Icons.play_arrow,
-                            color: isLocked ? Colors.white : const Color(0xFF6C5CE7),
-                            size: 24,
-                          ),
-                        ),
+                                errorBuilder: (_, __, ___) =>
+                                    _buildThumbIcon(canPlay),
+                              )
+                            : _buildThumbIcon(canPlay),
                       ),
                     ),
-                    
-                    // Watched Badge
-                    if (video.isWatched)
-                      Positioned(
-                        top: 4,
-                        left: 4,
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF00B894),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.check,
-                            color: Colors.white,
-                            size: 12,
-                          ),
-                        ),
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: canPlay
+                            ? IosTheme.primaryBlue.withValues(alpha: 0.9)
+                            : Colors.black.withValues(alpha: 0.65),
+                        shape: BoxShape.circle,
                       ),
-
+                      child: Icon(
+                        canPlay
+                            ? CupertinoIcons.play_fill
+                            : CupertinoIcons.lock_fill,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(width: 12),
-
-                // Video Info
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Order Number
-                      Text(
-                        'Video ${video.order}',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Color(0xFF6C5CE7),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-
-                      // Title
-                      Text(
-                        video.title,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1A1F36),
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-
-                      // Description
-                      if (video.description != null)
-                        Text(
-                          video.description!,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      const SizedBox(height: 8),
-
-                      // Progress Bar (if in progress)
-                      if (video.watchProgress > 0 && video.watchProgress < 100)
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(2),
-                              child: LinearProgressIndicator(
-                                value: video.watchProgress / 100,
-                                backgroundColor: Colors.grey[200],
-                                valueColor: const AlwaysStoppedAnimation<Color>(
-                                  Color(0xFF6C5CE7),
-                                ),
-                                minHeight: 4,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '${video.watchProgress}% watched',
-                              style: const TextStyle(
-                                fontSize: 10,
-                                color: Color(0xFF6C5CE7),
-                              ),
-                            ),
-                          ],
-                        ),
-
-                      // Status Badges
                       Row(
                         children: [
-                          if (video.isPreview == true)
+                          Text(
+                            'Lecture ${video.order > 0 ? video.order : index + 1}',
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: IosTheme.primaryBlue,
+                            ),
+                          ),
+                          if (video.isPreview == true ||
+                              video.isFree == true) ...[
+                            const SizedBox(width: 6),
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 6,
-                                vertical: 2,
+                                vertical: 1.5,
                               ),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFFD79A8).withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(4),
+                                color:
+                                    IosTheme.systemGreen.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(5),
                               ),
                               child: const Text(
-                                'PREVIEW',
+                                'FREE',
                                 style: TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFFFD79A8),
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: IosTheme.systemGreen,
                                 ),
                               ),
                             ),
+                          ],
                         ],
                       ),
+                      const SizedBox(height: 3),
+                      Text(
+                        video.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w600,
+                          color: IosTheme.labelPrimary,
+                        ),
+                      ),
+                      if (video.displayDuration != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          video.displayDuration!,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: IosTheme.labelTertiary,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
+                ),
+                const Icon(
+                  CupertinoIcons.chevron_right,
+                  size: 14,
+                  color: Color(0xFFC7C7CC),
                 ),
               ],
             ),
@@ -644,14 +358,72 @@ class _VideoCard extends StatelessWidget {
     );
   }
 
-  Widget _buildPlaceholder() {
+  Widget _buildThumbIcon(bool canPlay) {
     return Container(
-      color: const Color(0xFFE5E7EB),
-      child: const Center(
+      color: IosTheme.groupedBg,
+      child: Center(
         child: Icon(
-          Icons.play_circle_outline,
-          size: 32,
-          color: Color(0xFF9CA3AF),
+          CupertinoIcons.play_rectangle_fill,
+          size: 28,
+          color: canPlay
+              ? IosTheme.primaryBlue.withValues(alpha: 0.3)
+              : IosTheme.labelTertiary.withValues(alpha: 0.4),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmpty() {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              CupertinoIcons.video_camera,
+              size: 48,
+              color: IosTheme.labelTertiary,
+            ),
+            SizedBox(height: 12),
+            Text(
+              'No Lectures Available',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: IosTheme.labelPrimary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildError() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              CupertinoIcons.exclamationmark_triangle,
+              color: IosTheme.systemRed,
+              size: 42,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _errorMessage!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: IosTheme.labelTertiary),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: 150,
+              child: IosPrimaryButton(label: 'Retry', onPressed: _loadVideos),
+            ),
+          ],
         ),
       ),
     );

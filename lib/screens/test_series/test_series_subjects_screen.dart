@@ -1,17 +1,22 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:coaching/models/test_series_models.dart';
-import 'package:coaching/services/api_service.dart';
-import 'package:coaching/screens/test_series/subject_tests_screen.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
+import '../../models/test_series_models.dart';
+import '../../registration/login_screen.dart';
+import '../../services/api_service.dart';
+import '../../services/payment_service.dart';
+import '../../widgets/ios_components.dart';
+import 'subject_tests_screen.dart';
 
 class TestSeriesSubjectsScreen extends StatefulWidget {
   final int testSeriesId;
   final String title;
 
   const TestSeriesSubjectsScreen({
-    Key? key,
+    super.key,
     required this.testSeriesId,
     required this.title,
-  }) : super(key: key);
+  });
 
   @override
   State<TestSeriesSubjectsScreen> createState() =>
@@ -23,350 +28,517 @@ class _TestSeriesSubjectsScreenState extends State<TestSeriesSubjectsScreen> {
   bool _isPurchasing = false;
   TestSeries? _seriesDetails;
   String? _error;
+  String? _pendingOrderId;
+  late final PaymentService _paymentService;
 
   @override
   void initState() {
     super.initState();
+    _paymentService = PaymentService();
+    _paymentService.onPaymentSuccess = _handlePaymentSuccess;
+    _paymentService.onPaymentError = _handlePaymentError;
+    _paymentService.onExternalWallet = _handleExternalWallet;
     _fetchSubjects();
   }
 
-  Future<void> _fetchSubjects() async {
-    try {
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
+  @override
+  void dispose() {
+    _paymentService.dispose();
+    super.dispose();
+  }
 
-      final response = await ApiService.getTestSeriesSubjects(
-        widget.testSeriesId,
-      );
-      if (response['success'] == true && response['data'] != null) {
+  Future<void> _fetchSubjects() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      // Load test series detail for price/metadata + subjects endpoint
+      final results = await Future.wait([
+        ApiService.getTestSeriesDetail(widget.testSeriesId),
+        ApiService.getTestSeriesSubjects(widget.testSeriesId),
+      ]);
+
+      if (!mounted) return;
+
+      final detailRes = results[0];
+      final subjectsRes = results[1];
+
+      if (subjectsRes['success'] == true && subjectsRes['data'] != null) {
+        var series = TestSeries.fromJson(subjectsRes['data']);
+
+        if (detailRes['success'] == true && detailRes['data'] != null) {
+          final detail = TestSeries.fromJson(detailRes['data']);
+          series = series.copyWith(
+            price: detail.price > 0 ? detail.price : series.price,
+            isFree: detail.isFree,
+            isPurchased: detail.isPurchased || series.isPurchased,
+            isAccessible: detail.isAccessible || series.isAccessible,
+            description: detail.description.isNotEmpty
+                ? detail.description
+                : series.description,
+          );
+        }
+
         setState(() {
-          _seriesDetails = TestSeries.fromJson(response['data']);
+          _seriesDetails = series;
           _isLoading = false;
         });
       } else {
         setState(() {
-          _error = response['message'] ?? 'Failed to load subjects';
+          _error = ApiService.extractErrorMessage(
+            subjectsRes,
+            fallback: 'Failed to load test series subjects.',
+          );
           _isLoading = false;
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _error = 'Error: $e';
+        _error = 'Network error: ${e.toString()}';
         _isLoading = false;
       });
     }
   }
 
   Future<void> _handlePurchase() async {
-    if (_isPurchasing) return;
+    if (_isPurchasing || _seriesDetails == null) return;
 
-    // In a real app, integrate payment gateway here
-    // For now, mock the purchase API call
-    setState(() => _isPurchasing = true);
-
-    try {
-      final response = await ApiService.purchaseTestSeries(widget.testSeriesId);
-      if (response['success'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Purchase Successful!'),
-            backgroundColor: Colors.green,
+    final isLoggedIn = await ApiService.isLoggedIn();
+    if (!isLoggedIn) {
+      if (!mounted) return;
+      final goLogin = await showCupertinoDialog<bool>(
+        context: context,
+        builder: (ctx) => CupertinoAlertDialog(
+          title: const Text('Sign In Required'),
+          content: const Text(
+            'Please sign in to unlock and attempt this test series.',
           ),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Sign In'),
+            ),
+          ],
+        ),
+      );
+      if (goLogin == true && mounted) {
+        final ok = await Navigator.push<bool>(
+          context,
+          CupertinoPageRoute(builder: (context) => const LoginScreen()),
         );
-        _fetchSubjects(); // Refresh to unlock
+        if (ok == true) _fetchSubjects();
+      }
+      return;
+    }
+
+    setState(() => _isPurchasing = true);
+    try {
+      final profileResponse = await ApiService.getProfile();
+      if (!mounted) return;
+
+      final userData = profileResponse['data']?['user'] ??
+          profileResponse['data'] ??
+          <String, dynamic>{};
+      final userName = userData['name']?.toString() ?? 'Student';
+      final userEmail = userData['email']?.toString() ?? '';
+      final userPhone = userData['phone']?.toString() ?? '';
+
+      final orderResult = await _paymentService.initiateOrder(
+        purchasableType: 'test',
+        purchasableId: widget.testSeriesId,
+      );
+
+      if (!mounted) return;
+
+      if (orderResult['success'] == true) {
+        if (orderResult['is_free_instant'] == true) {
+          showIosToast(
+            context,
+            title: 'Access Granted',
+            message: 'Test series unlocked!',
+          );
+          await _fetchSubjects();
+          return;
+        }
+
+        _pendingOrderId = orderResult['order_id']?.toString();
+        final amount =
+            (orderResult['amount'] as double?) ?? _seriesDetails!.price;
+
+        _paymentService.openCheckout(
+          amountRupees: amount > 0 ? amount : _seriesDetails!.price,
+          orderId: _pendingOrderId ?? '',
+          itemTitle: orderResult['item_title']?.toString().isNotEmpty == true
+              ? orderResult['item_title'].toString()
+              : widget.title,
+          userName: userName,
+          userEmail: userEmail,
+          userPhone: userPhone,
+        );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(response['message'] ?? 'Purchase failed'),
-            backgroundColor: Colors.red,
-          ),
+        showIosToast(
+          context,
+          title: 'Checkout Error',
+          message: orderResult['message'] ?? 'Could not create order.',
+          icon: CupertinoIcons.exclamationmark_circle_fill,
+          iconColor: IosTheme.systemRed,
         );
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-      );
     } finally {
-      setState(() => _isPurchasing = false);
+      if (mounted) setState(() => _isPurchasing = false);
     }
+  }
+
+  Future<void> _handlePaymentSuccess(PaymentSuccessResponse response) async {
+    final orderId = (response.orderId != null && response.orderId!.isNotEmpty)
+        ? response.orderId!
+        : (_pendingOrderId ?? '');
+
+    final verifyResult = await _paymentService.verifyPayment(
+      orderId: orderId,
+      paymentId: response.paymentId ?? '',
+      signature: response.signature,
+    );
+
+    if (!mounted) return;
+
+    if (verifyResult['success'] == true) {
+      showIosToast(
+        context,
+        title: 'Payment Verified',
+        message: verifyResult['message'] ?? 'Test series unlocked!',
+      );
+      await _fetchSubjects();
+    } else {
+      showIosToast(
+        context,
+        title: 'Verification Failed',
+        message: verifyResult['message'] ?? 'Could not verify payment.',
+        icon: CupertinoIcons.exclamationmark_circle_fill,
+        iconColor: IosTheme.systemRed,
+      );
+    }
+  }
+
+  void _handlePaymentError(PaymentFailureResponse response) {
+    if (!mounted) return;
+    showIosToast(
+      context,
+      title: 'Payment Cancelled',
+      message: response.message ?? 'Payment was not completed.',
+      icon: CupertinoIcons.xmark_circle_fill,
+      iconColor: IosTheme.systemRed,
+    );
+  }
+
+  void _handleExternalWallet(ExternalWalletResponse response) {
+    if (!mounted) return;
+    showIosToast(
+      context,
+      title: 'External Wallet',
+      message: 'Selected: ${response.walletName ?? 'Wallet'}',
+      icon: CupertinoIcons.creditcard_fill,
+      iconColor: IosTheme.primaryBlue,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0.5,
-      ),
-      backgroundColor: const Color(0xFFF8F9FD),
+      backgroundColor: IosTheme.groupedBg,
+      appBar: IosNavBar(title: widget.title, subtitle: 'Test Series'),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CupertinoActivityIndicator(radius: 14))
           : _error != null
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(_error!, style: const TextStyle(color: Colors.red)),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _fetchSubjects,
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
-            )
-          : _seriesDetails == null
-          ? const Center(child: Text('No details found'))
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  if (!_seriesDetails!.isPurchased &&
-                      !_seriesDetails!.isAccessible)
-                    _buildPurchaseCard(),
-                  if (_seriesDetails!.isPurchased ||
-                      _seriesDetails!.isAccessible)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 24),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.green.withOpacity(0.3),
+              ? _buildError()
+              : _seriesDetails == null
+                  ? const Center(child: Text('No details found'))
+                  : RefreshIndicator(
+                      onRefresh: _fetchSubjects,
+                      color: IosTheme.primaryBlue,
+                      child: SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(
+                          parent: AlwaysScrollableScrollPhysics(),
+                        ),
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (!_seriesDetails!.isPurchased &&
+                                !_seriesDetails!.isAccessible &&
+                                !_seriesDetails!.isFree)
+                              _buildPurchaseCard()
+                            else
+                              _buildAccessGrantedBanner(),
+                            const SizedBox(height: 20),
+                            IosSectionLabel(
+                              'Subjects (${_seriesDetails!.subjects?.length ?? 0})',
+                            ),
+                            if (_seriesDetails!.subjects != null &&
+                                _seriesDetails!.subjects!.isNotEmpty)
+                              IosGroupedCard(
+                                children: List.generate(
+                                  _seriesDetails!.subjects!.length,
+                                  (index) => _buildSubjectRow(
+                                    _seriesDetails!.subjects![index],
+                                    index ==
+                                        _seriesDetails!.subjects!.length - 1,
+                                  ),
+                                ),
+                              )
+                            else
+                              const Padding(
+                                padding: EdgeInsets.all(24),
+                                child: Center(
+                                  child: Text(
+                                    'No subjects found in this test series.',
+                                    style: TextStyle(
+                                      color: IosTheme.labelTertiary,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.check_circle, color: Colors.green),
-                          SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              'Purchased / Access Granted',
-                              style: TextStyle(
-                                color: Colors.green,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
+    );
+  }
 
-                  const SizedBox(height: 16),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Subjects',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1E293B),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  if (_seriesDetails!.subjects != null)
-                    GridView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            childAspectRatio: 1.1,
-                            crossAxisSpacing: 16,
-                            mainAxisSpacing: 16,
-                          ),
-                      itemCount: _seriesDetails!.subjects!.length,
-                      itemBuilder: (context, index) {
-                        return _buildSubjectCard(
-                          _seriesDetails!.subjects![index],
-                        );
-                      },
-                    ),
-                ],
+  Widget _buildAccessGrantedBanner() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+      decoration: BoxDecoration(
+        color: IosTheme.systemGreen.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: IosTheme.systemGreen.withValues(alpha: 0.28),
+        ),
+      ),
+      child: const Row(
+        children: [
+          Icon(
+            CupertinoIcons.checkmark_alt_circle_fill,
+            color: IosTheme.systemGreen,
+            size: 22,
+          ),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Access Unlocked • Attempt any subject mock test below',
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+                color: IosTheme.systemGreen,
               ),
             ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildPurchaseCard() {
     return Container(
-      margin: const EdgeInsets.only(bottom: 24),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.red.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
-        border: Border.all(color: Colors.red.withOpacity(0.1)),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: IosTheme.separator, width: 0.6),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                width: 42,
+                height: 42,
                 decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
-                  shape: BoxShape.circle,
+                  color: IosTheme.systemOrange.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(11),
                 ),
                 child: const Icon(
-                  Icons.warning_amber_rounded,
-                  color: Colors.red,
+                  CupertinoIcons.lock_fill,
+                  color: IosTheme.systemOrange,
+                  size: 21,
                 ),
               ),
-              const SizedBox(width: 16),
-              const Expanded(
+              const SizedBox(width: 12),
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Purchase Required',
+                    const Text(
+                      'Unlock Full Test Series',
                       style: TextStyle(
                         fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1E293B),
+                        fontWeight: FontWeight.w700,
+                        color: IosTheme.labelPrimary,
                       ),
                     ),
-                    SizedBox(height: 4),
+                    const SizedBox(height: 2),
                     Text(
-                      'Get access to all tests',
-                      style: TextStyle(fontSize: 14, color: Colors.grey),
+                      _seriesDetails!.price > 0
+                          ? 'Get full access to all mock tests & solutions for ₹${_seriesDetails!.price.toStringAsFixed(0)}'
+                          : 'Get instant access to all mock tests & solutions',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: IosTheme.labelTertiary,
+                      ),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _isPurchasing ? null : _handlePurchase,
-              icon: _isPurchasing
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.credit_card),
-              label: Text(
-                _isPurchasing
-                    ? 'Processing...'
-                    : 'Buy Now - ₹${_seriesDetails!.price}',
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6366F1),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
+          const SizedBox(height: 16),
+          IosPrimaryButton(
+            label: _seriesDetails!.price > 0
+                ? 'Unlock Now • ₹${_seriesDetails!.price.toStringAsFixed(0)}'
+                : 'Unlock Free',
+            isLoading: _isPurchasing,
+            icon: CupertinoIcons.creditcard_fill,
+            onPressed: _handlePurchase,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSubjectCard(TestSeriesSubject subject) {
-    bool isLocked = !_seriesDetails!.isAccessible && !subject.isAccessible;
+  Widget _buildSubjectRow(TestSeriesSubject subject, bool isLast) {
+    final bool isLocked = !_seriesDetails!.isAccessible &&
+        !_seriesDetails!.isFree &&
+        !subject.isAccessible;
 
-    return InkWell(
-      onTap: () {
-        if (isLocked) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Please purchase the series to access this subject',
+    return Column(
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              if (isLocked) {
+                showIosToast(
+                  context,
+                  title: 'Test Series Locked',
+                  message: 'Unlock the test series above to attempt mock tests.',
+                  icon: CupertinoIcons.lock_fill,
+                  iconColor: IosTheme.systemOrange,
+                );
+              } else {
+                Navigator.push(
+                  context,
+                  CupertinoPageRoute(
+                    builder: (context) => SubjectTestsScreen(
+                      testSeriesId: widget.testSeriesId,
+                      subjectId: subject.id,
+                      title: subject.name,
+                      seriesTitle: widget.title,
+                    ),
+                  ),
+                );
+              }
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: (isLocked
+                              ? IosTheme.labelTertiary
+                              : IosTheme.primaryBlue)
+                          .withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      isLocked
+                          ? CupertinoIcons.lock_fill
+                          : CupertinoIcons.doc_text_fill,
+                      color: isLocked
+                          ? IosTheme.labelTertiary
+                          : IosTheme.primaryBlue,
+                      size: 19,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          subject.name,
+                          style: const TextStyle(
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.w600,
+                            color: IosTheme.labelPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${subject.testCount} Mock Paper${subject.testCount == 1 ? "" : "s"}'
+                          '${subject.questionCount > 0 ? " • ${subject.questionCount} Questions" : ""}',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            color: IosTheme.labelTertiary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    CupertinoIcons.chevron_right,
+                    size: 15,
+                    color: Color(0xFFC7C7CC),
+                  ),
+                ],
               ),
             ),
-          );
-        } else {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => SubjectTestsScreen(
-                testSeriesId: widget.testSeriesId,
-                subjectId: subject.id,
-                title: subject.name,
-                seriesTitle: widget.title,
-              ),
-            ),
-          );
-        }
-      },
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          ),
         ),
+        if (!isLast)
+          const Divider(
+            height: 0.5,
+            indent: 66,
+            color: IosTheme.separator,
+          ),
+      ],
+    );
+  }
+
+  Widget _buildError() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: isLocked
-                    ? Colors.grey[100]
-                    : const Color(0xFF6366F1).withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.book_rounded,
-                color: isLocked ? Colors.grey : const Color(0xFF6366F1),
-                size: 28,
-              ),
+            const Icon(
+              CupertinoIcons.exclamationmark_triangle,
+              color: IosTheme.systemRed,
+              size: 44,
             ),
             const SizedBox(height: 12),
             Text(
-              subject.name,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1E293B),
-              ),
+              _error!,
               textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: IosTheme.labelTertiary),
             ),
-            const SizedBox(height: 4),
-            Text(
-              '${subject.testCount} Tests',
-              style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: 150,
+              child: IosPrimaryButton(label: 'Retry', onPressed: _fetchSubjects),
             ),
-            const SizedBox(height: 12),
-            if (isLocked)
-              const Icon(Icons.lock, color: Colors.grey, size: 20)
-            else
-              const Icon(Icons.check_circle, color: Colors.green, size: 20),
           ],
         ),
       ),

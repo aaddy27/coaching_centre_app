@@ -5,6 +5,8 @@ import '../services/api_service.dart';
 import '../registration/login_screen.dart';
 import 'edit_profile_screen.dart';
 import 'change_password_screen.dart';
+import 'purchase_history_screen.dart';
+import 'test_series/test_history_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -56,31 +58,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _handleLogout() async {
-    final confirm = await showCupertinoDialog<bool>(
+    final choice = await showCupertinoModalPopup<String>(
       context: context,
-      builder: (BuildContext dialogContext) => CupertinoAlertDialog(
+      builder: (BuildContext sheetContext) => CupertinoActionSheet(
         title: const Text('Log Out'),
-        content: const Text(
-          'Are you sure you want to log out of your account?',
+        message: const Text(
+          'Choose whether to sign out of this device only or all signed-in devices.',
         ),
-        actions: <CupertinoDialogAction>[
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          CupertinoDialogAction(
+        actions: <CupertinoActionSheetAction>[
+          CupertinoActionSheetAction(
             isDestructiveAction: true,
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Log Out'),
+            onPressed: () => Navigator.pop(sheetContext, 'single'),
+            child: const Text('Log Out This Device'),
+          ),
+          CupertinoActionSheetAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.pop(sheetContext, 'all'),
+            child: const Text('Log Out All Devices'),
           ),
         ],
+        cancelButton: CupertinoActionSheetAction(
+          isDefaultAction: true,
+          onPressed: () => Navigator.pop(sheetContext, null),
+          child: const Text('Cancel'),
+        ),
       ),
     );
 
-    if (confirm != true) return;
+    if (choice == null || !mounted) return;
 
-    if (!mounted) return;
     showCupertinoDialog(
       context: context,
       barrierDismissible: false,
@@ -90,7 +96,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
 
     try {
-      final response = await ApiService.logout();
+      final response = choice == 'all'
+          ? await ApiService.logoutAll()
+          : await ApiService.logout();
 
       if (!mounted) return;
       Navigator.pop(context); // Close loading dialog
@@ -294,7 +302,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ]),
                 const SizedBox(height: 24),
 
-                // 4. Section: Account Settings
+                // 4. Section: Learning & Orders Activity
+                _buildSectionHeader('LEARNING & ORDERS'),
+                const SizedBox(height: 8),
+                _buildGroupedCard([
+                  _buildActionRow(
+                    icon: CupertinoIcons.doc_chart_fill,
+                    iconColor: const Color(0xFF5856D6),
+                    title: 'My Test History',
+                    subtitle: 'View past test attempts, scores & solutions',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        CupertinoPageRoute(
+                          builder: (context) => const TestHistoryScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  const Divider(height: 1, indent: 48, color: Color(0xFFE5E5EA)),
+                  _buildActionRow(
+                    icon: CupertinoIcons.bag_fill,
+                    iconColor: const Color(0xFF34C759),
+                    title: 'Purchase History',
+                    subtitle: 'Receipts and payment status for orders',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        CupertinoPageRoute(
+                          builder: (context) => const PurchaseHistoryScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                ]),
+                const SizedBox(height: 24),
+
+                // 5. Section: Account Settings
                 _buildSectionHeader('ACCOUNT & SECURITY'),
                 const SizedBox(height: 8),
                 _buildGroupedCard([
@@ -341,7 +385,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Clipboard.setData(
                         const ClipboardData(
                           text:
-                              '📚 Prepare for exams with Coaching App! Download here: https://coachingapp.in',
+                              '📚 Prepare for exams with Olive Learnings! Visit: https://eduapp.hkrdn.in',
                         ),
                       );
                       _showIosToast(
@@ -355,7 +399,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ]),
                 const SizedBox(height: 24),
 
-                // 5. Section: Sign Out
+                // 6. Section: Sign Out
                 _buildGroupedCard([
                   CupertinoButton(
                     padding: const EdgeInsets.symmetric(
@@ -386,12 +430,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ]),
                 const SizedBox(height: 28),
 
-                // 6. App Version Footer
+                // 7. App Version Footer
                 Center(
                   child: Column(
                     children: [
                       Text(
-                        'Coaching Centre App',
+                        'Olive Learnings',
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,

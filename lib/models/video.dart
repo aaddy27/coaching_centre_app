@@ -4,6 +4,7 @@ class Video {
   final String? description;
   final int order;
   final String? duration;
+  final String? durationFormatted;
   final int? durationSeconds;
   final double? sizeMb;
   final String? thumbnail;
@@ -13,7 +14,10 @@ class Video {
   final String? youtubeId;
   final bool? isPreview;
   final bool? isFree;
-  final String? status; // ready, processing, pending, failed
+  final bool canPlay;
+  final bool requiresPurchase;
+  final int? viewLimit;
+  final String? status;
   final int? views;
   final bool isWatched;
   final int watchProgress;
@@ -26,6 +30,7 @@ class Video {
     this.description,
     required this.order,
     this.duration,
+    this.durationFormatted,
     this.durationSeconds,
     this.sizeMb,
     this.thumbnail,
@@ -35,6 +40,9 @@ class Video {
     this.youtubeId,
     this.isPreview,
     this.isFree,
+    this.canPlay = false,
+    this.requiresPurchase = false,
+    this.viewLimit,
     this.status,
     this.views,
     required this.isWatched,
@@ -43,11 +51,24 @@ class Video {
     this.qualityOptions,
   });
 
+  String? get displayDuration {
+    if (durationFormatted != null && durationFormatted!.isNotEmpty) {
+      return durationFormatted;
+    }
+    if (duration != null && duration!.isNotEmpty) {
+      return duration;
+    }
+    if (durationSeconds != null && durationSeconds! > 0) {
+      final mins = (durationSeconds! / 60).round();
+      return '$mins mins';
+    }
+    return null;
+  }
+
   factory Video.fromJson(Map<String, dynamic> json) {
-    // Auto-detect video type from URL if not provided
-    String videoType = json['video_type'] ?? 'upload';
-    final videoUrl = json['video_url'] as String?;
-    
+    String videoType = json['video_type']?.toString() ?? 'upload';
+    final videoUrl = json['video_url']?.toString();
+
     if (videoType == 'upload' && videoUrl != null) {
       if (videoUrl.contains('youtube.com') || videoUrl.contains('youtu.be')) {
         videoType = 'youtube';
@@ -55,35 +76,66 @@ class Video {
         videoType = 'vimeo';
       }
     }
-    
+
+    final isPreviewVal = _parseBool(json['is_preview']);
+    final isFreeVal = _parseBool(json['is_free']);
+    final requiresPurchaseVal = _parseBool(json['requires_purchase']) ?? false;
+    final canPlayVal = _parseBool(json['can_play']) ??
+        ((isPreviewVal == true || isFreeVal == true) && !requiresPurchaseVal);
+
     return Video(
-      id: json['id'] ?? 0,
-      title: json['title'] ?? '',
-      description: json['description'],
-      order: json['order'] ?? 0,
-      duration: json['duration'],
-      durationSeconds: json['duration_seconds'],
-      sizeMb: json['size_mb']?.toDouble(),
-      thumbnail: json['thumbnail'],
+      id: _parseInt(json['id']) ?? 0,
+      title: json['title']?.toString() ?? '',
+      description: json['description']?.toString(),
+      order: _parseInt(json['order']) ?? 0,
+      duration: json['duration']?.toString(),
+      durationFormatted: json['duration_formatted']?.toString(),
+      durationSeconds: _parseInt(json['duration_seconds']),
+      sizeMb: _parseDouble(json['size_mb']),
+      thumbnail: json['thumbnail']?.toString(),
       videoType: videoType,
       videoUrl: videoUrl,
-      vimeoId: json['vimeo_id'],
-      youtubeId: json['youtube_id'],
-      isPreview: json['is_preview'],
-      isFree: json['is_free'],
-      status: json['status'],
-      views: json['views'],
-      isWatched: json['is_watched'] ?? false,
-      watchProgress: json['watch_progress'] ?? 0,
+      vimeoId: json['vimeo_id']?.toString(),
+      youtubeId: json['youtube_id']?.toString(),
+      isPreview: isPreviewVal,
+      isFree: isFreeVal,
+      canPlay: canPlayVal,
+      requiresPurchase: requiresPurchaseVal,
+      viewLimit: _parseInt(json['view_limit']),
+      status: json['status']?.toString(),
+      views: _parseInt(json['views']),
+      isWatched: _parseBool(json['is_watched']) ?? false,
+      watchProgress: _parseInt(json['watch_progress']) ?? 0,
       lastWatchedAt: json['last_watched_at'] != null
-          ? DateTime.tryParse(json['last_watched_at'])
+          ? DateTime.tryParse(json['last_watched_at'].toString())
           : null,
-      qualityOptions: json['quality_options'] != null
+      qualityOptions: json['quality_options'] is List
           ? (json['quality_options'] as List)
               .map((q) => QualityOption.fromJson(q))
               .toList()
           : null,
     );
+  }
+
+  static int? _parseInt(dynamic val) {
+    if (val == null) return null;
+    if (val is int) return val;
+    if (val is num) return val.toInt();
+    return int.tryParse(val.toString());
+  }
+
+  static double? _parseDouble(dynamic val) {
+    if (val == null) return null;
+    if (val is num) return val.toDouble();
+    return double.tryParse(val.toString());
+  }
+
+  static bool? _parseBool(dynamic val) {
+    if (val == null) return null;
+    if (val is bool) return val;
+    if (val is num) return val == 1;
+    if (val is String) return val == 'true' || val == '1';
+    return null;
   }
 
   Map<String, dynamic> toJson() {
@@ -93,6 +145,7 @@ class Video {
       'description': description,
       'order': order,
       'duration': duration,
+      'duration_formatted': durationFormatted,
       'duration_seconds': durationSeconds,
       'size_mb': sizeMb,
       'thumbnail': thumbnail,
@@ -102,6 +155,9 @@ class Video {
       'youtube_id': youtubeId,
       'is_preview': isPreview,
       'is_free': isFree,
+      'can_play': canPlay,
+      'requires_purchase': requiresPurchase,
+      'view_limit': viewLimit,
       'status': status,
       'views': views,
       'is_watched': isWatched,
@@ -125,9 +181,9 @@ class QualityOption {
 
   factory QualityOption.fromJson(Map<String, dynamic> json) {
     return QualityOption(
-      label: json['label'] ?? '',
-      sizeMb: json['size_mb']?.toDouble(),
-      url: json['url'],
+      label: json['label']?.toString() ?? '',
+      sizeMb: json['size_mb'] is num ? (json['size_mb'] as num).toDouble() : null,
+      url: json['url']?.toString(),
     );
   }
 

@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 class Course {
   final int id;
   final int? examBoardId;
@@ -14,6 +16,7 @@ class Course {
   final String? thumbnailPath;
   final String? previewVideo;
   final bool isPublished;
+  final bool isPurchased;
   final int? totalVideos;
   final int? totalTests;
   final int? enrolledStudents;
@@ -42,6 +45,7 @@ class Course {
     this.thumbnailPath,
     this.previewVideo,
     required this.isPublished,
+    this.isPurchased = false,
     this.totalVideos,
     this.totalTests,
     this.enrolledStudents,
@@ -54,6 +58,14 @@ class Course {
     this.examBoard,
     this.subjects,
   });
+
+  String? get effectiveThumbnail {
+    if (thumbnail != null && thumbnail!.isNotEmpty) return thumbnail;
+    if (thumbnailPath != null && thumbnailPath!.isNotEmpty) {
+      return thumbnailPath;
+    }
+    return null;
+  }
 
   factory Course.fromJson(Map<String, dynamic> json) {
     try {
@@ -69,35 +81,37 @@ class Course {
         duration: json['duration']?.toString(),
         level: json['level']?.toString(),
         language: json['language']?.toString(),
-        thumbnail: json['thumbnail']?.toString(),
+        thumbnail: json['thumbnail']?.toString() ?? json['thumbnail_path']?.toString(),
         thumbnailPath: json['thumbnail_path']?.toString(),
         previewVideo: json['preview_video']?.toString(),
         isPublished: json['is_published'] == true || json['is_published'] == 1 || json['is_published'] == '1',
-        totalVideos: _parseInt(json['total_videos']),
+        isPurchased: json['is_purchased'] == true ||
+            json['has_purchased'] == true ||
+            json['is_enrolled'] == true,
+        totalVideos: _parseInt(json['total_videos']) ?? _parseInt(json['videos_count']),
         totalTests: _parseInt(json['total_tests']),
         enrolledStudents: _parseInt(json['enrolled_students']),
-        totalSubjects: json['subjects'] != null 
-            ? (json['subjects'] as List).length 
+        totalSubjects: json['subjects'] != null
+            ? (json['subjects'] as List).length
             : _parseInt(json['total_subjects']),
         totalDuration: json['total_duration']?.toString(),
         progress: _parseInt(json['progress']),
         completedVideos: _parseInt(json['completed_videos']),
-        enrolledAt: json['enrolled_at'] != null 
-            ? DateTime.tryParse(json['enrolled_at'].toString()) 
+        enrolledAt: json['enrolled_at'] != null
+            ? DateTime.tryParse(json['enrolled_at'].toString())
             : null,
-        createdAt: json['created_at'] != null 
-            ? DateTime.tryParse(json['created_at'].toString()) 
+        createdAt: json['created_at'] != null
+            ? DateTime.tryParse(json['created_at'].toString())
             : null,
-        examBoard: json['exam_board'] != null 
-            ? ExamBoard.fromJson(json['exam_board']) 
+        examBoard: json['exam_board'] != null
+            ? ExamBoard.fromJson(json['exam_board'])
             : null,
         subjects: json['subjects'] != null
             ? (json['subjects'] as List).map((s) => CourseSubject.fromJson(s)).toList()
             : null,
       );
     } catch (e) {
-      print('Error parsing course: $e');
-      print('Course JSON: $json');
+      debugPrint('Error parsing course: $e');
       rethrow;
     }
   }

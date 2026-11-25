@@ -113,7 +113,7 @@ class _CoursesScreenState extends State<CoursesScreen> {
 
   // ==================== iOS Share Action Sheet ====================
   void _showShareSheet(Course course) {
-    final shareUrl = 'https://coachingapp.in/course/${course.slug}';
+    final shareUrl = 'https://eduapp.hkrdn.in/course/${course.slug}';
     final priceText =
         course.price <= 0 ? 'FREE' : '₹${course.price.toStringAsFixed(0)}';
 
@@ -603,10 +603,9 @@ class _CoursesScreenState extends State<CoursesScreen> {
                     ),
                     child: AspectRatio(
                       aspectRatio: 16 / 9,
-                      child: course.thumbnail != null &&
-                              course.thumbnail!.isNotEmpty
+                      child: course.effectiveThumbnail != null
                           ? Image.network(
-                              course.thumbnail!,
+                              course.effectiveThumbnail!,
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) =>
                                   _buildThumbnailPlaceholder(course),

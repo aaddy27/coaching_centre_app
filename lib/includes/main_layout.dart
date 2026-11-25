@@ -78,7 +78,7 @@ class _MainLayoutState extends State<MainLayout> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Coaching Centre',
+                        'Olive Learnings',
                         style: TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.w700,

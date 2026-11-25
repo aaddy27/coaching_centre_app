@@ -139,7 +139,7 @@ class _TestSeriesListScreenState extends State<TestSeriesListScreen> {
 
   // ==================== iOS Share Action Sheet ====================
   void _showShareSheet(TestSeries series) {
-    final shareUrl = 'https://coachingapp.in/test-series/${series.id}';
+    final shareUrl = 'https://eduapp.hkrdn.in/test-series/${series.id}';
     final subjectsText = series.subjects != null && series.subjects!.isNotEmpty
         ? series.subjects!.map((s) => s.name).join(', ')
         : 'All Subjects Mock Tests';

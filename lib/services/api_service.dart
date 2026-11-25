@@ -1,6 +1,7 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart' as http;
 
 class ApiService {
   // Base URL - Production
@@ -8,49 +9,75 @@ class ApiService {
 
   // Secure storage for token
   static const storage = FlutterSecureStorage();
+  static const Duration _timeout = Duration(seconds: 30);
 
   // Common headers
-  static Map<String, String> get headers => {
+  static Map<String, String> get headers => const {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   };
 
-  // Headers with authentication token
+  // Headers with authentication token (required)
   static Future<Map<String, String>> get authHeaders async {
     final token = await getToken();
     return {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      'Authorization': 'Bearer $token',
+      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
     };
+  }
+
+  // Headers with optional authentication token (for catalog / public endpoints)
+  static Future<Map<String, String>> get optionalAuthHeaders async {
+    return authHeaders;
   }
 
   // ==================== Token Management ====================
 
-  /// Save authentication token
   static Future<void> saveToken(String token) async {
     await storage.write(key: 'auth_token', value: token);
   }
 
-  /// Get authentication token
   static Future<String?> getToken() async {
     return await storage.read(key: 'auth_token');
   }
 
-  /// Delete authentication token
   static Future<void> deleteToken() async {
     await storage.delete(key: 'auth_token');
   }
 
-  /// Check if user is logged in
   static Future<bool> isLoggedIn() async {
     final token = await getToken();
     return token != null && token.isNotEmpty;
   }
 
-  // ==================== Authentication APIs ====================
+  /// Formats validation / API errors into a single readable message.
+  static String extractErrorMessage(
+    Map<String, dynamic> response, {
+    String fallback = 'Something went wrong. Please try again.',
+  }) {
+    if (response['errors'] is Map) {
+      final errors = response['errors'] as Map;
+      final messages = <String>[];
+      for (final value in errors.values) {
+        if (value is List && value.isNotEmpty) {
+          messages.addAll(value.map((e) => e.toString()));
+        } else if (value != null) {
+          messages.add(value.toString());
+        }
+      }
+      if (messages.isNotEmpty) {
+        return messages.join('\n');
+      }
+    }
+    final msg = response['message']?.toString();
+    if (msg != null && msg.isNotEmpty) return msg;
+    return fallback;
+  }
 
-  /// Register new user - Step 1: Send OTP
+  // ==================== 1. Authentication & Account ====================
+
+  /// 1.1 Register - Step 1: Send OTP
   /// POST /auth/register
   static Future<Map<String, dynamic>> register({
     required String name,
@@ -59,16 +86,18 @@ class ApiService {
     required String passwordConfirmation,
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/auth/register'),
-        headers: headers,
-        body: jsonEncode({
-          'name': name,
-          'phone': phone,
-          'password': password,
-          'password_confirmation': passwordConfirmation,
-        }),
-      );
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/auth/register'),
+            headers: headers,
+            body: jsonEncode({
+              'name': name,
+              'phone': phone,
+              'password': password,
+              'password_confirmation': passwordConfirmation,
+            }),
+          )
+          .timeout(_timeout);
 
       return _handleResponse(response);
     } catch (e) {
@@ -76,18 +105,20 @@ class ApiService {
     }
   }
 
-  /// Verify Registration OTP - Step 2: Complete Registration
+  /// 1.2 Register - Step 2: Verify OTP & Complete Account
   /// POST /auth/verify-registration-otp
   static Future<Map<String, dynamic>> verifyRegistrationOtp({
     required String phone,
     required String otp,
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/auth/verify-registration-otp'),
-        headers: headers,
-        body: jsonEncode({'phone': phone, 'otp': otp}),
-      );
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/auth/verify-registration-otp'),
+            headers: headers,
+            body: jsonEncode({'phone': phone, 'otp': otp}),
+          )
+          .timeout(_timeout);
 
       return _handleResponse(response);
     } catch (e) {
@@ -95,18 +126,20 @@ class ApiService {
     }
   }
 
-  /// Login user
+  /// 1.3 Password Login
   /// POST /auth/login
   static Future<Map<String, dynamic>> login({
     required String phone,
     required String password,
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/auth/login'),
-        headers: headers,
-        body: jsonEncode({'phone': phone, 'password': password}),
-      );
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/auth/login'),
+            headers: headers,
+            body: jsonEncode({'phone': phone, 'password': password}),
+          )
+          .timeout(_timeout);
 
       return _handleResponse(response);
     } catch (e) {
@@ -114,17 +147,60 @@ class ApiService {
     }
   }
 
-  /// Forgot Password - Send OTP
+  /// 1.4 OTP Login - Step 1: Request Login OTP
+  /// POST /auth/login-otp
+  static Future<Map<String, dynamic>> requestLoginOtp({
+    required String phone,
+  }) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/auth/login-otp'),
+            headers: headers,
+            body: jsonEncode({'phone': phone}),
+          )
+          .timeout(_timeout);
+
+      return _handleResponse(response);
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  /// 1.5 OTP Login - Step 2: Verify Login OTP
+  /// POST /auth/verify-login-otp
+  static Future<Map<String, dynamic>> verifyLoginOtp({
+    required String phone,
+    required String otp,
+  }) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/auth/verify-login-otp'),
+            headers: headers,
+            body: jsonEncode({'phone': phone, 'otp': otp}),
+          )
+          .timeout(_timeout);
+
+      return _handleResponse(response);
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  /// 1.6 Forgot Password - Step 1: Send Reset OTP
   /// POST /auth/forgot-password
   static Future<Map<String, dynamic>> forgotPassword({
     required String phone,
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/auth/forgot-password'),
-        headers: headers,
-        body: jsonEncode({'phone': phone}),
-      );
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/auth/forgot-password'),
+            headers: headers,
+            body: jsonEncode({'phone': phone}),
+          )
+          .timeout(_timeout);
 
       return _handleResponse(response);
     } catch (e) {
@@ -132,18 +208,20 @@ class ApiService {
     }
   }
 
-  /// Verify OTP
+  /// 1.6 Forgot Password - Step 2: Verify Reset OTP
   /// POST /auth/verify-otp
   static Future<Map<String, dynamic>> verifyOtp({
     required String phone,
     required String otp,
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/auth/verify-otp'),
-        headers: headers,
-        body: jsonEncode({'phone': phone, 'otp': otp}),
-      );
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/auth/verify-otp'),
+            headers: headers,
+            body: jsonEncode({'phone': phone, 'otp': otp}),
+          )
+          .timeout(_timeout);
 
       return _handleResponse(response);
     } catch (e) {
@@ -151,7 +229,7 @@ class ApiService {
     }
   }
 
-  /// Reset Password
+  /// 1.6 Forgot Password - Step 3: Set New Password
   /// POST /auth/reset-password
   static Future<Map<String, dynamic>> resetPassword({
     required String phone,
@@ -160,16 +238,18 @@ class ApiService {
     required String passwordConfirmation,
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/auth/reset-password'),
-        headers: headers,
-        body: jsonEncode({
-          'phone': phone,
-          'reset_token': resetToken,
-          'password': password,
-          'password_confirmation': passwordConfirmation,
-        }),
-      );
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/auth/reset-password'),
+            headers: headers,
+            body: jsonEncode({
+              'phone': phone,
+              'reset_token': resetToken,
+              'password': password,
+              'password_confirmation': passwordConfirmation,
+            }),
+          )
+          .timeout(_timeout);
 
       return _handleResponse(response);
     } catch (e) {
@@ -177,7 +257,7 @@ class ApiService {
     }
   }
 
-  /// Change Password (for logged-in users)
+  /// 1.7 Change Password (Protected)
   /// POST /auth/change-password
   static Future<Map<String, dynamic>> changePassword({
     required String currentPassword,
@@ -185,15 +265,17 @@ class ApiService {
     required String passwordConfirmation,
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/auth/change-password'),
-        headers: await authHeaders,
-        body: jsonEncode({
-          'current_password': currentPassword,
-          'password': password,
-          'password_confirmation': passwordConfirmation,
-        }),
-      );
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/auth/change-password'),
+            headers: await authHeaders,
+            body: jsonEncode({
+              'current_password': currentPassword,
+              'password': password,
+              'password_confirmation': passwordConfirmation,
+            }),
+          )
+          .timeout(_timeout);
 
       return _handleResponse(response);
     } catch (e) {
@@ -201,14 +283,13 @@ class ApiService {
     }
   }
 
-  /// Get User Profile
+  /// 1.7 Get User Profile (Protected)
   /// GET /auth/profile
   static Future<Map<String, dynamic>> getProfile() async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/auth/profile'),
-        headers: await authHeaders,
-      );
+      final response = await http
+          .get(Uri.parse('$baseUrl/auth/profile'), headers: await authHeaders)
+          .timeout(_timeout);
 
       return _handleResponse(response);
     } catch (e) {
@@ -216,7 +297,7 @@ class ApiService {
     }
   }
 
-  /// Update User Profile
+  /// 1.7 Update User Profile (Protected)
   /// PUT /auth/profile
   static Future<Map<String, dynamic>> updateProfile({
     String? name,
@@ -231,11 +312,13 @@ class ApiService {
       if (city != null) body['city'] = city;
       if (state != null) body['state'] = state;
 
-      final response = await http.put(
-        Uri.parse('$baseUrl/auth/profile'),
-        headers: await authHeaders,
-        body: jsonEncode(body),
-      );
+      final response = await http
+          .put(
+            Uri.parse('$baseUrl/auth/profile'),
+            headers: await authHeaders,
+            body: jsonEncode(body),
+          )
+          .timeout(_timeout);
 
       return _handleResponse(response);
     } catch (e) {
@@ -243,82 +326,83 @@ class ApiService {
     }
   }
 
-  /// Logout from current device
+  /// 1.7 Logout current device
   /// POST /auth/logout
   static Future<Map<String, dynamic>> logout() async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/auth/logout'),
-        headers: await authHeaders,
-      );
+      final response = await http
+          .post(Uri.parse('$baseUrl/auth/logout'), headers: await authHeaders)
+          .timeout(_timeout);
 
       final result = _handleResponse(response);
-
-      // Delete token from local storage
-      if (result['success'] == true) {
-        await deleteToken();
-      }
-
+      await deleteToken();
       return result;
     } catch (e) {
       return {'success': false, 'message': 'Network error: ${e.toString()}'};
     }
   }
 
-  /// Logout from all devices
+  /// 1.7 Logout from all devices
   /// POST /auth/logout-all
   static Future<Map<String, dynamic>> logoutAll() async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/auth/logout-all'),
-        headers: await authHeaders,
-      );
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/auth/logout-all'),
+            headers: await authHeaders,
+          )
+          .timeout(_timeout);
 
       final result = _handleResponse(response);
-
-      // Delete token from local storage
-      if (result['success'] == true) {
-        await deleteToken();
-      }
-
+      await deleteToken();
       return result;
     } catch (e) {
       return {'success': false, 'message': 'Network error: ${e.toString()}'};
     }
   }
 
-  // ==================== Course APIs ====================
+  // ==================== 2. Courses & Curriculum ====================
 
-  /// Get All Courses (Public)
+  /// 2.1 Get All Courses (Catalog)
   /// GET /courses
-  static Future<Map<String, dynamic>> getAllCourses() async {
+  static Future<Map<String, dynamic>> getAllCourses({
+    int? examId,
+    int? subjectId,
+    String? search,
+  }) async {
     try {
+      final queryParams = <String, String>{};
+      if (examId != null) queryParams['exam_id'] = examId.toString();
+      if (subjectId != null) queryParams['subject_id'] = subjectId.toString();
+      if (search != null && search.trim().isNotEmpty) {
+        queryParams['search'] = search.trim();
+      }
+
+      final uri = Uri.parse(
+        '$baseUrl/courses',
+      ).replace(queryParameters: queryParams.isEmpty ? null : queryParams);
+
       final response = await http
-          .get(Uri.parse('$baseUrl/courses'), headers: headers)
-          .timeout(
-            const Duration(seconds: 30),
-            onTimeout: () {
-              throw Exception(
-                'Connection timeout. Please check your internet connection.',
-              );
-            },
-          );
+          .get(uri, headers: await optionalAuthHeaders)
+          .timeout(_timeout);
 
       return _handleResponse(response);
     } catch (e) {
-      print('getAllCourses Error Details: $e');
+      debugPrint('getAllCourses Error: $e');
       return {'success': false, 'message': 'Network error: ${e.toString()}'};
     }
   }
 
-  /// Get Course Details by Slug (Public)
+  /// 2.2 Get Course Detail by Slug
   /// GET /courses/{slug}
   static Future<Map<String, dynamic>> getCourseBySlug(String slug) async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/courses/$slug'),
-        headers: headers,
-      );
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/courses/$slug'),
+            headers: await optionalAuthHeaders,
+          )
+          .timeout(_timeout);
 
       return _handleResponse(response);
     } catch (e) {
@@ -326,113 +410,117 @@ class ApiService {
     }
   }
 
-  /// Get My Enrolled Courses (Protected)
-  /// GET /my-courses
-  static Future<Map<String, dynamic>> getMyCourses() async {
+  /// 2.3 Get Course Videos with Lock Status
+  /// GET /courses/{id}/videos
+  static Future<Map<String, dynamic>> getCourseVideos(
+    int courseId, {
+    String? filter,
+    String? sort,
+  }) async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/my-courses'),
-        headers: await authHeaders,
-      );
+      final queryParams = <String, String>{};
+      if (filter != null) queryParams['filter'] = filter;
+      if (sort != null) queryParams['sort'] = sort;
+
+      final uri = Uri.parse(
+        '$baseUrl/courses/$courseId/videos',
+      ).replace(queryParameters: queryParams.isEmpty ? null : queryParams);
+
+      final response = await http
+          .get(uri, headers: await optionalAuthHeaders)
+          .timeout(_timeout);
 
       return _handleResponse(response);
     } catch (e) {
+      debugPrint('getCourseVideos Error: $e');
       return {'success': false, 'message': 'Network error: ${e.toString()}'};
     }
   }
 
-  /// Get Course Subjects with Video Count (Protected)
-  /// GET /courses/{courseId}/subjects
-  static Future<Map<String, dynamic>> getCourseSubjects(int courseId) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/courses/$courseId/subjects'),
-        headers: await authHeaders,
-      );
-
-      return _handleResponse(response);
-    } catch (e) {
-      return {'success': false, 'message': 'Network error: ${e.toString()}'};
-    }
-  }
-
-  /// Get Course Videos (Protected)
-  /// GET /courses/{courseId}/videos
-  /// Note: API returns all videos for a course, we filter by subject on client side
+  /// Get Subject Videos (uses /courses/{courseId}/videos and filters by subject if present)
   static Future<Map<String, dynamic>> getSubjectVideos({
     required int courseId,
     required int subjectId,
-    String? filter, // unwatched, watched, in_progress
-    String? sort, // order, duration, -duration, title
+    String? filter,
+    String? sort,
   }) async {
+    final result = await getCourseVideos(courseId, filter: filter, sort: sort);
+    if (result['success'] == true && result['data'] != null) {
+      final data = result['data'];
+      final videosData = data['videos'] as List?;
+      if (videosData != null) {
+        final hasSubjectTag = videosData.any(
+          (v) => v is Map && (v['subject'] != null || v['subject_id'] != null),
+        );
+
+        final filteredVideos = hasSubjectTag
+            ? videosData.where((video) {
+                if (video is! Map) return false;
+                final videoSubject = video['subject'];
+                final sid = videoSubject is Map
+                    ? videoSubject['id']
+                    : video['subject_id'];
+                return sid == subjectId;
+              }).toList()
+            : videosData;
+
+        return {
+          'success': true,
+          'message': result['message'],
+          'data': {
+            'course_id': data['course_id'] ?? courseId,
+            'course_title': data['course_title'],
+            'has_purchased': data['has_purchased'] ?? false,
+            'course': data['course'],
+            'videos': filteredVideos,
+          },
+        };
+      }
+    }
+    return result;
+  }
+
+  /// 2.4 Get My Enrolled Courses (Protected)
+  /// GET /my-courses
+  static Future<Map<String, dynamic>> getMyCourses() async {
     try {
-      // According to API docs, endpoint is /courses/{courseId}/videos
-      String url = '$baseUrl/courses/$courseId/videos';
-
-      // Add query parameters
-      List<String> queryParams = [];
-      if (filter != null) queryParams.add('filter=$filter');
-      if (sort != null) queryParams.add('sort=$sort');
-
-      if (queryParams.isNotEmpty) {
-        url += '?${queryParams.join('&')}';
-      }
-
-      print('Fetching videos from: $url');
-
       final response = await http
-          .get(Uri.parse(url), headers: await authHeaders)
-          .timeout(
-            const Duration(seconds: 30),
-            onTimeout: () {
-              throw Exception('Connection timeout');
-            },
-          );
+          .get(Uri.parse('$baseUrl/my-courses'), headers: await authHeaders)
+          .timeout(_timeout);
 
-      print('Videos API Response Status: ${response.statusCode}');
-
-      final result = _handleResponse(response);
-
-      // Filter videos by subject on client side
-      if (result['success'] == true && result['data'] != null) {
-        final videosData = result['data']['videos'] as List?;
-        if (videosData != null) {
-          // Filter videos that belong to this subject
-          final filteredVideos = videosData.where((video) {
-            final videoSubject = video['subject'];
-            return videoSubject != null && videoSubject['id'] == subjectId;
-          }).toList();
-
-          print(
-            'Total videos: ${videosData.length}, Filtered for subject $subjectId: ${filteredVideos.length}',
-          );
-
-          return {
-            'success': true,
-            'message': result['message'],
-            'data': {
-              'course': result['data']['course'],
-              'videos': filteredVideos,
-            },
-          };
-        }
-      }
-
-      return result;
+      return _handleResponse(response);
     } catch (e) {
-      print('getSubjectVideos Error: $e');
       return {'success': false, 'message': 'Network error: ${e.toString()}'};
     }
   }
 
-  /// Get Course Curriculum (All subjects with videos) (Protected)
+  /// Get Course Subjects with Video Count
+  /// GET /courses/{courseId}/subjects
+  static Future<Map<String, dynamic>> getCourseSubjects(int courseId) async {
+    try {
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/courses/$courseId/subjects'),
+            headers: await optionalAuthHeaders,
+          )
+          .timeout(_timeout);
+
+      return _handleResponse(response);
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  /// Get Course Curriculum
   /// GET /courses/{courseId}/curriculum
   static Future<Map<String, dynamic>> getCourseCurriculum(int courseId) async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/courses/$courseId/curriculum'),
-        headers: await authHeaders,
-      );
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/courses/$courseId/curriculum'),
+            headers: await optionalAuthHeaders,
+          )
+          .timeout(_timeout);
 
       return _handleResponse(response);
     } catch (e) {
@@ -440,103 +528,22 @@ class ApiService {
     }
   }
 
-  /// Get Subject Statistics (Protected)
-  /// GET /courses/{courseId}/subjects/{subjectId}/stats
-  static Future<Map<String, dynamic>> getSubjectStats({
-    required int courseId,
-    required int subjectId,
-  }) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/courses/$courseId/subjects/$subjectId/stats'),
-        headers: await authHeaders,
-      );
+  // ==================== 3. Video Streaming & Playback ====================
 
-      return _handleResponse(response);
-    } catch (e) {
-      return {'success': false, 'message': 'Network error: ${e.toString()}'};
-    }
-  }
-
-  /// Search Videos in Subject (Protected)
-  /// GET /courses/{courseId}/subjects/{subjectId}/videos/search
-  static Future<Map<String, dynamic>> searchVideosInSubject({
-    required int courseId,
-    required int subjectId,
-    required String query,
-  }) async {
-    try {
-      final response = await http.get(
-        Uri.parse(
-          '$baseUrl/courses/$courseId/subjects/$subjectId/videos/search?q=$query',
-        ),
-        headers: await authHeaders,
-      );
-
-      return _handleResponse(response);
-    } catch (e) {
-      return {'success': false, 'message': 'Network error: ${e.toString()}'};
-    }
-  }
-
-  /// Stream Video (Protected)
-  /// GET /videos/{videoId}/stream
+  /// 3.1 Stream Video (Access Check - Protected)
+  /// GET /videos/{id}/stream
   static Future<Map<String, dynamic>> streamVideo(int videoId) async {
     try {
-      final url = '$baseUrl/videos/$videoId/stream';
-      final headers = await authHeaders;
-
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('📹 Stream Video API Request');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('URL: $url');
-      print('Method: GET');
-      print('Headers: ${headers.keys.join(", ")}');
-      print('Auth Token Present: ${headers['Authorization'] != null}');
-      if (headers['Authorization'] != null) {
-        final token = headers['Authorization']!;
-        final maskedToken = token.length > 20
-            ? '${token.substring(0, 20)}...${token.substring(token.length - 10)}'
-            : token;
-        print('Authorization Header: $maskedToken');
-      }
-
       final response = await http
-          .get(Uri.parse(url), headers: headers)
-          .timeout(
-            const Duration(seconds: 30),
-            onTimeout: () {
-              throw Exception('Request timeout after 30 seconds');
-            },
-          );
+          .get(
+            Uri.parse('$baseUrl/videos/$videoId/stream'),
+            headers: await authHeaders,
+          )
+          .timeout(_timeout);
 
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('📥 Stream Video API Response');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('Status Code: ${response.statusCode}');
-      print('Response Body Length: ${response.body.length} bytes');
-      print(
-        'Response Body Preview: ${response.body.substring(0, response.body.length > 200 ? 200 : response.body.length)}...',
-      );
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
-      final result = _handleResponse(response);
-
-      if (result['success'] == false) {
-        print('❌ API Error: ${result['message']}');
-      } else {
-        print('✅ API Success');
-      }
-
-      return result;
-    } catch (e, stackTrace) {
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('❌ Stream Video Exception');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('Error: $e');
-      print('Stack Trace: $stackTrace');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
+      return _handleResponse(response);
+    } catch (e) {
+      debugPrint('streamVideo Error: $e');
       return {'success': false, 'message': 'Network error: ${e.toString()}'};
     }
   }
@@ -545,18 +552,20 @@ class ApiService {
   /// POST /videos/{videoId}/progress
   static Future<Map<String, dynamic>> updateVideoProgress({
     required int videoId,
-    required int progress, // 0-100
+    required int progress,
     required int watchedSeconds,
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/videos/$videoId/progress'),
-        headers: await authHeaders,
-        body: jsonEncode({
-          'progress': progress,
-          'watched_seconds': watchedSeconds,
-        }),
-      );
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/videos/$videoId/progress'),
+            headers: await authHeaders,
+            body: jsonEncode({
+              'progress': progress,
+              'watched_seconds': watchedSeconds,
+            }),
+          )
+          .timeout(_timeout);
 
       return _handleResponse(response);
     } catch (e) {
@@ -564,78 +573,21 @@ class ApiService {
     }
   }
 
-  // ==================== Test Series APIs ====================
+  // ==================== 4. Test Series & Assessments Engine ====================
 
-  /// Get All Tests (Public)
-  /// GET /tests
-  static Future<Map<String, dynamic>> getAllTests() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/tests'),
-        headers: headers,
-      );
-
-      return _handleResponse(response);
-    } catch (e) {
-      return {'success': false, 'message': 'Network error: ${e.toString()}'};
-    }
-  }
-
-  /// Get Test Details (Public)
-  /// GET /tests/{testId}
-  static Future<Map<String, dynamic>> getTestDetails(int testId) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/tests/$testId'),
-        headers: headers,
-      );
-
-      return _handleResponse(response);
-    } catch (e) {
-      return {'success': false, 'message': 'Network error: ${e.toString()}'};
-    }
-  }
-
-  /// Get My Test Attempts (Protected)
-  /// GET /my-attempts
-  static Future<Map<String, dynamic>> getMyAttempts() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/my-attempts'),
-        headers: await authHeaders,
-      );
-
-      return _handleResponse(response);
-    } catch (e) {
-      return {'success': false, 'message': 'Network error: ${e.toString()}'};
-    }
-  }
-
-  /// Start Test Attempt (Protected)
-  /// POST /tests/{testId}/start
-  static Future<Map<String, dynamic>> startTest(int testId) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/tests/$testId/start'),
-        headers: await authHeaders,
-      );
-
-      return _handleResponse(response);
-    } catch (e) {
-      return {'success': false, 'message': 'Network error: ${e.toString()}'};
-    }
-  }
-
-  // ==================== Test Series Flow APIs ====================
-
-  /// Get Test Series List
+  /// 4.1 Get All Test Series
   /// GET /test-series
-  static Future<Map<String, dynamic>> getTestSeriesList() async {
+  static Future<Map<String, dynamic>> getTestSeriesList({int? courseId}) async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/test-series'),
-        headers: await authHeaders,
+      final uri = Uri.parse('$baseUrl/test-series').replace(
+        queryParameters: courseId != null
+            ? {'course_id': courseId.toString()}
+            : null,
       );
+
+      final response = await http
+          .get(uri, headers: await optionalAuthHeaders)
+          .timeout(_timeout);
 
       return _handleResponse(response);
     } catch (e) {
@@ -643,14 +595,16 @@ class ApiService {
     }
   }
 
-  /// Get Test Series Subjects
-  /// GET /test-series/{id}/subjects
-  static Future<Map<String, dynamic>> getTestSeriesSubjects(int id) async {
+  /// 4.2 Get Test Series Detail
+  /// GET /test-series/{id}
+  static Future<Map<String, dynamic>> getTestSeriesDetail(int id) async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/test-series/$id/subjects'),
-        headers: await authHeaders,
-      );
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/test-series/$id'),
+            headers: await optionalAuthHeaders,
+          )
+          .timeout(_timeout);
 
       return _handleResponse(response);
     } catch (e) {
@@ -658,19 +612,38 @@ class ApiService {
     }
   }
 
-  /// Get Tests by Subject
+  /// 4.3 Get Subjects in a Test Series
+  /// GET /test-series/{testId}/subjects
+  static Future<Map<String, dynamic>> getTestSeriesSubjects(int testId) async {
+    try {
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/test-series/$testId/subjects'),
+            headers: await optionalAuthHeaders,
+          )
+          .timeout(_timeout);
+
+      return _handleResponse(response);
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  /// 4.4 Get Child Tests for a Subject
   /// GET /test-series/{testId}/subjects/{subjectId}/tests
   static Future<Map<String, dynamic>> getSubjectTests({
     required int testSeriesId,
     required int subjectId,
   }) async {
     try {
-      final response = await http.get(
-        Uri.parse(
-          '$baseUrl/test-series/$testSeriesId/subjects/$subjectId/tests',
-        ),
-        headers: await authHeaders,
-      );
+      final response = await http
+          .get(
+            Uri.parse(
+              '$baseUrl/test-series/$testSeriesId/subjects/$subjectId/tests',
+            ),
+            headers: await optionalAuthHeaders,
+          )
+          .timeout(_timeout);
 
       return _handleResponse(response);
     } catch (e) {
@@ -678,14 +651,16 @@ class ApiService {
     }
   }
 
-  /// Get Test Questions
+  /// 4.5 Get Questions for a Test (Protected)
   /// GET /tests/{testId}/questions
   static Future<Map<String, dynamic>> getTestQuestions(int testId) async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/tests/$testId/questions'),
-        headers: await authHeaders,
-      );
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/tests/$testId/questions'),
+            headers: await authHeaders,
+          )
+          .timeout(_timeout);
 
       return _handleResponse(response);
     } catch (e) {
@@ -693,17 +668,16 @@ class ApiService {
     }
   }
 
-  /// Purchase Test Series (Mock)
-  /// POST /purchase
-  static Future<Map<String, dynamic>> purchaseTestSeries(
-    int testSeriesId,
-  ) async {
+  /// 4.6 Start Test Attempt (Protected)
+  /// POST /tests/{id}/start
+  static Future<Map<String, dynamic>> startTest(int testId) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/purchase'),
-        headers: await authHeaders,
-        body: jsonEncode({'test_series_id': testSeriesId}),
-      );
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/tests/$testId/start'),
+            headers: await authHeaders,
+          )
+          .timeout(_timeout);
 
       return _handleResponse(response);
     } catch (e) {
@@ -711,25 +685,204 @@ class ApiService {
     }
   }
 
-  /// Handle HTTP response
+  /// 4.7 Save Answer in Real-Time (Protected)
+  /// POST /attempts/{id}/answer
+  static Future<Map<String, dynamic>> saveAttemptAnswer({
+    required int attemptId,
+    required int questionId,
+    required String answer,
+  }) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/attempts/$attemptId/answer'),
+            headers: await authHeaders,
+            body: jsonEncode({'question_id': questionId, 'answer': answer}),
+          )
+          .timeout(_timeout);
+
+      return _handleResponse(response);
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  /// 4.8 Submit / Finish Test (Protected)
+  /// POST /attempts/{id}/finish
+  static Future<Map<String, dynamic>> finishTestAttempt(int attemptId) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/attempts/$attemptId/finish'),
+            headers: await authHeaders,
+          )
+          .timeout(_timeout);
+
+      return _handleResponse(response);
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  /// 4.9 Get Detailed Scorecard / Report (Protected)
+  /// GET /attempts/{id}/report
+  static Future<Map<String, dynamic>> getAttemptReport(int attemptId) async {
+    try {
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/attempts/$attemptId/report'),
+            headers: await authHeaders,
+          )
+          .timeout(_timeout);
+
+      return _handleResponse(response);
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  /// 4.10 Get My Test History (Protected)
+  /// GET /my-attempts
+  static Future<Map<String, dynamic>> getMyAttempts() async {
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/my-attempts'), headers: await authHeaders)
+          .timeout(_timeout);
+
+      return _handleResponse(response);
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  /// Get All Tests (for Home preview)
+  /// GET /tests
+  static Future<Map<String, dynamic>> getAllTests() async {
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/tests'), headers: await optionalAuthHeaders)
+          .timeout(_timeout);
+
+      return _handleResponse(response);
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  /// Get Test Details
+  /// GET /tests/{testId}
+  static Future<Map<String, dynamic>> getTestDetails(int testId) async {
+    try {
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/tests/$testId'),
+            headers: await optionalAuthHeaders,
+          )
+          .timeout(_timeout);
+
+      return _handleResponse(response);
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  // ==================== 5. Purchases & Checkout Flow ====================
+
+  /// 5.1 Initiate Purchase / Create Order (Protected)
+  /// POST /purchase
+  /// purchasableType: 'course' or 'test'
+  static Future<Map<String, dynamic>> initiatePurchase({
+    required String purchasableType,
+    required int purchasableId,
+    String paymentProvider = 'razorpay',
+  }) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/purchase'),
+            headers: await authHeaders,
+            body: jsonEncode({
+              'purchasable_type': purchasableType,
+              'purchasable_id': purchasableId,
+              'payment_provider': paymentProvider,
+            }),
+          )
+          .timeout(_timeout);
+
+      return _handleResponse(response);
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  /// 5.2 Verify Payment Gateway Callback (Protected)
+  /// POST /payment/verify
+  static Future<Map<String, dynamic>> verifyPayment({
+    required String orderId,
+    required String paymentId,
+    String? signature,
+  }) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/payment/verify'),
+            headers: await authHeaders,
+            body: jsonEncode({
+              'order_id': orderId,
+              'payment_id': paymentId,
+              if (signature != null && signature.isNotEmpty)
+                'signature': signature,
+            }),
+          )
+          .timeout(_timeout);
+
+      return _handleResponse(response);
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  /// 5.3 Get My Purchase History (Protected)
+  /// GET /my-purchases
+  static Future<Map<String, dynamic>> getMyPurchases() async {
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/my-purchases'), headers: await authHeaders)
+          .timeout(_timeout);
+
+      return _handleResponse(response);
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: ${e.toString()}'};
+    }
+  }
+
+  // ==================== Response Handler ====================
+
   static Map<String, dynamic> _handleResponse(http.Response response) {
     try {
-      final Map<String, dynamic> data = jsonDecode(response.body);
+      final decoded = jsonDecode(response.body);
+      final Map<String, dynamic> data = decoded is Map<String, dynamic>
+          ? decoded
+          : {'success': response.statusCode < 300, 'data': decoded};
 
-      // Handle different status codes
+      data['status_code'] = response.statusCode;
+
       if (response.statusCode >= 200 && response.statusCode < 300) {
-        return data;
-      } else if (response.statusCode == 401) {
-        // Unauthorized - token expired or invalid
-        deleteToken(); // Clear invalid token
-        return data;
-      } else {
+        data['success'] ??= true;
         return data;
       }
+
+      if (response.statusCode == 401) {
+        deleteToken();
+      }
+
+      data['success'] ??= false;
+      return data;
     } catch (e) {
       return {
         'success': false,
-        'message': 'Failed to parse response: ${e.toString()}',
+        'status_code': response.statusCode,
+        'message': 'Failed to parse response (${response.statusCode})',
       };
     }
   }
