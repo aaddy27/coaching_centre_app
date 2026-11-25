@@ -6,6 +6,12 @@ class TestSeries {
   final bool isFree;
   final bool isPurchased;
   final bool isAccessible;
+  final int duration;
+  final double totalMarks;
+  final int questionsCount;
+  final double rating;
+  final int reviewsCount;
+  final bool isCompleted;
   final List<TestSeriesSubject>? subjects;
 
   TestSeries({
@@ -16,6 +22,12 @@ class TestSeries {
     required this.isFree,
     required this.isPurchased,
     required this.isAccessible,
+    this.duration = 0,
+    this.totalMarks = 0.0,
+    this.questionsCount = 0,
+    this.rating = 4.8,
+    this.reviewsCount = 42,
+    this.isCompleted = false,
     this.subjects,
   });
 
@@ -25,14 +37,60 @@ class TestSeries {
       title: json['title'] ?? '',
       description: json['description'] ?? '',
       price: _toDouble(json['price']),
-      isFree: json['is_free'] ?? false,
+      isFree: json['is_free'] ?? (json['price'] == null || _toDouble(json['price']) == 0.0),
       isPurchased: json['is_purchased'] ?? false,
       isAccessible: json['is_accessible'] ?? false,
+      duration: json['duration'] is int
+          ? json['duration']
+          : (int.tryParse('${json['duration']}') ?? 0),
+      totalMarks: _toDouble(json['total_marks']),
+      questionsCount: json['questions_count'] is int
+          ? json['questions_count']
+          : (int.tryParse('${json['questions_count']}') ?? 0),
+      rating: _toDouble(json['rating'] ?? 4.8),
+      reviewsCount: json['reviews_count'] is int
+          ? json['reviews_count']
+          : 48,
+      isCompleted: json['is_completed'] ?? false,
       subjects: json['subjects'] != null
           ? (json['subjects'] as List)
                 .map((e) => TestSeriesSubject.fromJson(e))
                 .toList()
           : null,
+    );
+  }
+
+  TestSeries copyWith({
+    int? id,
+    String? title,
+    String? description,
+    double? price,
+    bool? isFree,
+    bool? isPurchased,
+    bool? isAccessible,
+    int? duration,
+    double? totalMarks,
+    int? questionsCount,
+    double? rating,
+    int? reviewsCount,
+    bool? isCompleted,
+    List<TestSeriesSubject>? subjects,
+  }) {
+    return TestSeries(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      price: price ?? this.price,
+      isFree: isFree ?? this.isFree,
+      isPurchased: isPurchased ?? this.isPurchased,
+      isAccessible: isAccessible ?? this.isAccessible,
+      duration: duration ?? this.duration,
+      totalMarks: totalMarks ?? this.totalMarks,
+      questionsCount: questionsCount ?? this.questionsCount,
+      rating: rating ?? this.rating,
+      reviewsCount: reviewsCount ?? this.reviewsCount,
+      isCompleted: isCompleted ?? this.isCompleted,
+      subjects: subjects ?? this.subjects,
     );
   }
 }

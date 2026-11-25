@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
 import '../services/api_service.dart';
+import '../services/payment_service.dart';
 import '../models/course.dart';
 import '../models/subject.dart';
 import 'subject_videos_screen.dart';
@@ -23,10 +25,18 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
   late AnimationController _contentAnimationController;
   final ScrollController _scrollController = ScrollController();
   bool _showTitle = false;
+  late PaymentService _paymentService;
 
   @override
   void initState() {
     super.initState();
+    
+    // Initialize Payment Service
+    _paymentService = PaymentService();
+    _paymentService.onPaymentSuccess = _handlePaymentSuccess;
+    _paymentService.onPaymentError = _handlePaymentError;
+    _paymentService.onExternalWallet = _handleExternalWallet;
+    
     _headerAnimationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
@@ -49,6 +59,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
 
   @override
   void dispose() {
+    _paymentService.dispose();
     _headerAnimationController.dispose();
     _contentAnimationController.dispose();
     _scrollController.dispose();
@@ -133,6 +144,203 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
       });
       _headerAnimationController.forward();
       _contentAnimationController.forward();
+    }
+  }
+
+  // Payment Callback Handlers
+  void _handlePaymentSuccess(PaymentSuccessResponse response) async {
+    debugPrint('✅ Payment Successful!');
+    
+    // Verify payment on backend
+    final result = await _paymentService.verifyPayment(
+      paymentId: response.paymentId ?? '',
+      orderId: response.orderId ?? '',
+      signature: response.signature ?? '',
+      courseId: widget.course.id.toString(),
+    );
+
+    if (result['success'] == true) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: const [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Payment successful! Course enrolled.',
+                    style: TextStyle(fontSize: 15),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF10B981),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        
+        // Reload subjects after successful enrollment
+        await _checkEnrollmentAndLoadSubjects();
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message'] ?? 'Payment verification failed'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  void _handlePaymentError(PaymentFailureResponse response) {
+    debugPrint('❌ Payment Failed: ${response.message}');
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Payment failed: ${response.message ?? "Unknown error"}',
+                  style: const TextStyle(fontSize: 15),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+
+  void _handleExternalWallet(ExternalWalletResponse response) {
+    debugPrint('💳 External Wallet: ${response.walletName}');
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('External wallet selected: ${response.walletName}'),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
+    }
+  }
+
+  // Purchase Course Method
+  Future<void> _purchaseCourse() async {
+    // Check if user is logged in
+    final isLoggedIn = await ApiService.isLoggedIn();
+    if (!isLoggedIn) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Please login to purchase this course'),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Get user profile for prefill
+    final profileResponse = await ApiService.getProfile();
+    if (profileResponse['success'] != true) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Failed to load user profile'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    final userData = profileResponse['data']['user'];
+    final userName = userData['name'] ?? 'User';
+    final userEmail = userData['email'] ?? '';
+    final userPhone = userData['phone'] ?? '';
+
+    // Show loading
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
+          ),
+        ),
+      );
+    }
+
+    // Create order on backend
+    final orderResult = await _paymentService.createOrder(
+      amount: widget.course.price.toInt(),
+      courseId: widget.course.id.toString(),
+      courseName: widget.course.title,
+    );
+
+    // Hide loading
+    if (mounted) {
+      Navigator.pop(context);
+    }
+
+    if (orderResult['success'] == true) {
+      // Open Razorpay checkout
+      _paymentService.openCheckout(
+        amount: widget.course.price.toInt(),
+        orderId: orderResult['order_id'],
+        courseName: widget.course.title,
+        userName: userName,
+        userEmail: userEmail,
+        userPhone: userPhone,
+      );
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              orderResult['message'] ?? 'Failed to create order',
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
     }
   }
 
@@ -495,19 +703,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                             ],
                           ),
                           child: ElevatedButton(
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: const Text(
-                                    'Purchase feature coming soon!',
-                                  ),
-                                  behavior: SnackBarBehavior.floating,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                              );
-                            },
+                            onPressed: _purchaseCourse,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.transparent,
                               shadowColor: Colors.transparent,
