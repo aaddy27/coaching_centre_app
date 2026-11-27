@@ -1,13 +1,17 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import '../services/api_service.dart';
 import '../models/course.dart';
 import '../registration/login_screen.dart';
+import '../services/api_service.dart';
+import '../widgets/ios_components.dart';
 import 'course_detail_screen.dart';
 import 'courses_screen.dart';
 
 class MyCoursesScreen extends StatefulWidget {
-  const MyCoursesScreen({super.key});
+  final ValueListenable<int>? refreshNotifier;
+
+  const MyCoursesScreen({super.key, this.refreshNotifier});
 
   @override
   State<MyCoursesScreen> createState() => _MyCoursesScreenState();
@@ -27,13 +31,19 @@ class _MyCoursesScreenState extends State<MyCoursesScreen> {
   @override
   void initState() {
     super.initState();
+    widget.refreshNotifier?.addListener(_onExternalRefresh);
     _loadMyCourses();
   }
 
   @override
   void dispose() {
+    widget.refreshNotifier?.removeListener(_onExternalRefresh);
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onExternalRefresh() {
+    _loadMyCourses();
   }
 
   Future<void> _loadMyCourses() async {
@@ -55,16 +65,34 @@ class _MyCoursesScreenState extends State<MyCoursesScreen> {
       }
 
       final response = await ApiService.getMyCourses();
+      final localCourseProgress = await ApiService.getCourseProgressSummaryMap();
 
       if (response['success'] == true) {
         final List<dynamic> coursesData = response['data'] is List
             ? response['data']
             : (response['data']?['courses'] ?? []);
 
+        final parsed = coursesData.map((json) {
+          final c = Course.fromJson(json);
+          final local = localCourseProgress[c.id];
+          if (local == null) return c;
+          final lp = local['progress'] ?? 0;
+          final lc = local['completed_videos'] ?? 0;
+          final lt = local['total_videos'] ?? 0;
+          final serverProg = c.progress ?? 0;
+          return c.copyWithProgress(
+            progress: lp > serverProg ? lp : c.progress,
+            completedVideos: (c.completedVideos == null || c.completedVideos == 0)
+                ? lc
+                : c.completedVideos,
+            totalVideos:
+                (c.totalVideos == null || c.totalVideos == 0) ? lt : c.totalVideos,
+          );
+        }).toList();
+
         if (mounted) {
           setState(() {
-            _courses =
-                coursesData.map((json) => Course.fromJson(json)).toList();
+            _courses = parsed;
             _isLoading = false;
           });
         }
@@ -119,7 +147,7 @@ class _MyCoursesScreenState extends State<MyCoursesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: IosTheme.groupedBg,
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -449,7 +477,7 @@ class _MyCoursesScreenState extends State<MyCoursesScreen> {
               CupertinoPageRoute(
                 builder: (context) => CourseDetailScreen(course: course),
               ),
-            );
+            ).then((_) => _loadMyCourses());
           },
           borderRadius: BorderRadius.circular(20),
           child: Column(
@@ -464,10 +492,9 @@ class _MyCoursesScreenState extends State<MyCoursesScreen> {
                     ),
                     child: AspectRatio(
                       aspectRatio: 16 / 9,
-                      child: course.thumbnail != null &&
-                              course.thumbnail!.isNotEmpty
+                      child: course.effectiveThumbnail != null
                           ? Image.network(
-                              course.thumbnail!,
+                              course.effectiveThumbnail!,
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) =>
                                   _buildThumbnailPlaceholder(course),
@@ -685,13 +712,7 @@ class _MyCoursesScreenState extends State<MyCoursesScreen> {
 
   Widget _buildThumbnailPlaceholder(Course course) {
     return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF007AFF), Color(0xFF5856D6)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
+      color: IosTheme.primaryBlue,
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

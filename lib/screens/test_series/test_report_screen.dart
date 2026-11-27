@@ -8,12 +8,14 @@ class TestReportScreen extends StatefulWidget {
   final int attemptId;
   final String? testTitle;
   final TestReport? initialReport;
+  final String? autoSubmitReason;
 
   const TestReportScreen({
     super.key,
     required this.attemptId,
     this.testTitle,
     this.initialReport,
+    this.autoSubmitReason,
   });
 
   @override
@@ -118,6 +120,42 @@ class _TestReportScreenState extends State<TestReportScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (widget.autoSubmitReason != null &&
+              widget.autoSubmitReason!.isNotEmpty) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 14),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: IosTheme.systemOrange.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: IosTheme.systemOrange.withValues(alpha: 0.35),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    CupertinoIcons.shield_lefthalf_fill,
+                    color: IosTheme.systemOrange,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      widget.autoSubmitReason!,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: IosTheme.labelPrimary,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           // Score Summary Card
           Container(
             padding: const EdgeInsets.all(20),

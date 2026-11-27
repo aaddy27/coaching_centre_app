@@ -1,5 +1,7 @@
 class Video {
   final int id;
+  final int? subjectId;
+  final int? courseId;
   final String title;
   final String? description;
   final int order;
@@ -21,11 +23,14 @@ class Video {
   final int? views;
   final bool isWatched;
   final int watchProgress;
+  final int watchedSeconds;
   final DateTime? lastWatchedAt;
   final List<QualityOption>? qualityOptions;
 
   Video({
     required this.id,
+    this.subjectId,
+    this.courseId,
     required this.title,
     this.description,
     required this.order,
@@ -47,9 +52,46 @@ class Video {
     this.views,
     required this.isWatched,
     required this.watchProgress,
+    this.watchedSeconds = 0,
     this.lastWatchedAt,
     this.qualityOptions,
   });
+
+  Video copyWithProgress({
+    bool? isWatched,
+    int? watchProgress,
+    int? watchedSeconds,
+  }) {
+    return Video(
+      id: id,
+      subjectId: subjectId,
+      courseId: courseId,
+      title: title,
+      description: description,
+      order: order,
+      duration: duration,
+      durationFormatted: durationFormatted,
+      durationSeconds: durationSeconds,
+      sizeMb: sizeMb,
+      thumbnail: thumbnail,
+      videoType: videoType,
+      videoUrl: videoUrl,
+      vimeoId: vimeoId,
+      youtubeId: youtubeId,
+      isPreview: isPreview,
+      isFree: isFree,
+      canPlay: canPlay,
+      requiresPurchase: requiresPurchase,
+      viewLimit: viewLimit,
+      status: status,
+      views: views,
+      isWatched: isWatched ?? this.isWatched,
+      watchProgress: watchProgress ?? this.watchProgress,
+      watchedSeconds: watchedSeconds ?? this.watchedSeconds,
+      lastWatchedAt: lastWatchedAt,
+      qualityOptions: qualityOptions,
+    );
+  }
 
   String? get displayDuration {
     if (durationFormatted != null && durationFormatted!.isNotEmpty) {
@@ -85,9 +127,12 @@ class Video {
 
     return Video(
       id: _parseInt(json['id']) ?? 0,
+      subjectId: _parseInt(json['subject_id']) ??
+          (json['subject'] is Map ? _parseInt(json['subject']['id']) : null),
+      courseId: _parseInt(json['course_id']),
       title: json['title']?.toString() ?? '',
       description: json['description']?.toString(),
-      order: _parseInt(json['order']) ?? 0,
+      order: _parseInt(json['order']) ?? _parseInt(json['sort_order']) ?? 0,
       duration: json['duration']?.toString(),
       durationFormatted: json['duration_formatted']?.toString(),
       durationSeconds: _parseInt(json['duration_seconds']),
@@ -106,6 +151,7 @@ class Video {
       views: _parseInt(json['views']),
       isWatched: _parseBool(json['is_watched']) ?? false,
       watchProgress: _parseInt(json['watch_progress']) ?? 0,
+      watchedSeconds: _parseInt(json['watched_seconds']) ?? 0,
       lastWatchedAt: json['last_watched_at'] != null
           ? DateTime.tryParse(json['last_watched_at'].toString())
           : null,

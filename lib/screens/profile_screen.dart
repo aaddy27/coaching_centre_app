@@ -1,10 +1,11 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../services/api_service.dart';
 import '../registration/login_screen.dart';
-import 'edit_profile_screen.dart';
+import '../services/api_service.dart';
+import '../widgets/ios_components.dart';
 import 'change_password_screen.dart';
+import 'edit_profile_screen.dart';
 import 'purchase_history_screen.dart';
 import 'test_series/test_history_screen.dart';
 
@@ -110,76 +111,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
           (route) => false,
         );
       } else {
-        _showIosToast(
+        showIosToast(
+          context,
           title: 'Logout Failed',
           message: response['message'] ?? 'Could not log out',
           icon: CupertinoIcons.exclamationmark_circle,
-          iconColor: const Color(0xFFFF3B30),
+          iconColor: IosTheme.systemRed,
         );
       }
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context);
-      _showIosToast(
+      showIosToast(
+        context,
         title: 'Error',
         message: e.toString(),
         icon: CupertinoIcons.exclamationmark_circle,
-        iconColor: const Color(0xFFFF3B30),
+        iconColor: IosTheme.systemRed,
       );
     }
-  }
-
-  void _showIosToast({
-    required String title,
-    required String message,
-    IconData icon = CupertinoIcons.checkmark_alt_circle_fill,
-    Color iconColor = const Color(0xFF34C759),
-  }) {
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        elevation: 6,
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        backgroundColor: const Color(0xFF1C1C1E),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        duration: const Duration(seconds: 3),
-        content: Row(
-          children: [
-            Icon(icon, color: iconColor, size: 24),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    message,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFFE5E5EA),
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   @override
@@ -388,11 +338,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               '📚 Prepare for exams with Olive Learnings! Visit: https://eduapp.hkrdn.in',
                         ),
                       );
-                      _showIosToast(
+                      showIosToast(
+                        context,
                         title: 'App Link Copied',
                         message: 'Share link copied to clipboard.',
                         icon: CupertinoIcons.link,
-                        iconColor: const Color(0xFF007AFF),
+                        iconColor: IosTheme.primaryBlue,
                       );
                     },
                   ),
@@ -494,19 +445,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             width: 64,
             height: 64,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF007AFF), Color(0xFF5856D6)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+              color: IosTheme.primaryBlue,
               borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF007AFF).withValues(alpha: 0.3),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
             ),
             child: Center(
               child: Text(

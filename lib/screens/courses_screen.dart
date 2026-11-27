@@ -1,8 +1,9 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../services/api_service.dart';
 import '../models/course.dart';
+import '../services/api_service.dart';
+import '../widgets/ios_components.dart';
 import 'course_detail_screen.dart';
 
 class CoursesScreen extends StatefulWidget {
@@ -17,10 +18,10 @@ class _CoursesScreenState extends State<CoursesScreen> {
   bool _isLoading = true;
   String? _errorMessage;
 
-  // Search & Filter State
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   int _selectedSegment = 0; // 0: All, 1: Free, 2: Paid
+  int? _selectedExamBoardId;
 
   @override
   void initState() {
@@ -42,65 +43,78 @@ class _CoursesScreenState extends State<CoursesScreen> {
 
     try {
       final response = await ApiService.getAllCourses();
+      if (!mounted) return;
 
       if (response['success'] == true ||
           response['success'] == 1 ||
           response['success'] == '1') {
         List<dynamic> coursesData = [];
-
         if (response['data'] != null) {
           if (response['data'] is List) {
             coursesData = response['data'];
-          } else if (response['data']['courses'] != null) {
+          } else if (response['data']['courses'] is List) {
             coursesData = response['data']['courses'];
           }
-        } else if (response['courses'] != null) {
+        } else if (response['courses'] is List) {
           coursesData = response['courses'];
         }
 
-        if (mounted) {
-          setState(() {
-            _courses =
-                coursesData.map((json) => Course.fromJson(json)).toList();
-            _isLoading = false;
-          });
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            _errorMessage = response['message'] ?? 'Failed to load courses';
-            _isLoading = false;
-          });
-        }
-      }
-    } catch (e) {
-      if (mounted) {
         setState(() {
-          _errorMessage = 'Network Error: Unable to connect to server.';
+          _courses = coursesData.map((json) => Course.fromJson(json)).toList();
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _errorMessage = ApiService.extractErrorMessage(
+            response,
+            fallback: 'Failed to load courses',
+          );
           _isLoading = false;
         });
       }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = 'Network error: Unable to connect to server.';
+        _isLoading = false;
+      });
     }
   }
 
-  // Filtered courses based on segment & search query
+  List<ExamBoard> get _availableExamBoards {
+    final seen = <int, ExamBoard>{};
+    for (final c in _courses) {
+      if (c.examBoard != null && c.examBoard!.id > 0) {
+        seen.putIfAbsent(c.examBoard!.id, () => c.examBoard!);
+      }
+    }
+    return seen.values.toList();
+  }
+
   List<Course> get _filteredCourses {
     return _courses.where((course) {
-      // 1. Segment Filter
-      if (_selectedSegment == 1 && course.price > 0) {
-        return false; // Free tab
-      } else if (_selectedSegment == 2 && course.price <= 0) {
-        return false; // Paid tab
+      if (_selectedSegment == 1 && course.price > 0) return false;
+      if (_selectedSegment == 2 && course.price <= 0) return false;
+
+      if (_selectedExamBoardId != null &&
+          course.examBoard?.id != _selectedExamBoardId &&
+          course.examBoardId != _selectedExamBoardId) {
+        return false;
       }
 
-      // 2. Search query filter
       if (_searchQuery.trim().isNotEmpty) {
         final query = _searchQuery.trim().toLowerCase();
         final titleMatch = course.title.toLowerCase().contains(query);
         final descMatch = course.description.toLowerCase().contains(query);
-        final levelMatch =
-            course.level?.toLowerCase().contains(query) ?? false;
-        if (!titleMatch && !descMatch && !levelMatch) return false;
+        final boardMatch =
+            course.examBoard?.name.toLowerCase().contains(query) ?? false;
+        final subjectMatch = course.subjects?.any(
+              (s) => s.name.toLowerCase().contains(query),
+            ) ??
+            false;
+        if (!titleMatch && !descMatch && !boardMatch && !subjectMatch) {
+          return false;
+        }
       }
 
       return true;
@@ -111,7 +125,6 @@ class _CoursesScreenState extends State<CoursesScreen> {
   int get _freeCount => _courses.where((c) => c.price <= 0).length;
   int get _paidCount => _courses.where((c) => c.price > 0).length;
 
-  // ==================== iOS Share Action Sheet ====================
   void _showShareSheet(Course course) {
     final shareUrl = 'https://eduapp.hkrdn.in/course/${course.slug}';
     final priceText =
@@ -125,39 +138,37 @@ class _CoursesScreenState extends State<CoursesScreen> {
           style: const TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF1C1C1E),
+            color: IosTheme.labelPrimary,
           ),
         ),
         message: Text(
           'Price: $priceText • ${course.totalVideos ?? 0} Videos\nShare this course with friends & study groups',
-          style: const TextStyle(
-            fontSize: 13,
-            color: Color(0xFF8E8E93),
-          ),
+          style: const TextStyle(fontSize: 13, color: IosTheme.labelTertiary),
         ),
         actions: <CupertinoActionSheetAction>[
           CupertinoActionSheetAction(
             onPressed: () {
               Navigator.pop(sheetContext);
               Clipboard.setData(ClipboardData(text: shareUrl));
-              _showIosToast(
+              showIosToast(
+                context,
                 title: 'Link Copied',
                 message: 'Course link copied to clipboard.',
                 icon: CupertinoIcons.link,
-                iconColor: const Color(0xFF007AFF),
+                iconColor: IosTheme.primaryBlue,
               );
             },
             child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(CupertinoIcons.link, color: Color(0xFF007AFF), size: 20),
+                Icon(CupertinoIcons.link, color: IosTheme.primaryBlue, size: 20),
                 SizedBox(width: 8),
                 Flexible(
                   child: Text(
                     'Copy Course Link',
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: Color(0xFF007AFF),
+                      color: IosTheme.primaryBlue,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -174,11 +185,12 @@ class _CoursesScreenState extends State<CoursesScreen> {
                   '📹 Total Videos: ${course.totalVideos ?? "Complete Syllabus"}\n'
                   '🔗 Enroll Now: $shareUrl';
               Clipboard.setData(ClipboardData(text: waText));
-              _showIosToast(
+              showIosToast(
+                context,
                 title: 'Ready to Share',
                 message: 'Course info copied! Paste in WhatsApp or Telegram.',
                 icon: CupertinoIcons.chat_bubble_2_fill,
-                iconColor: const Color(0xFF34C759),
+                iconColor: IosTheme.systemGreen,
               );
             },
             child: const Row(
@@ -186,7 +198,7 @@ class _CoursesScreenState extends State<CoursesScreen> {
               children: [
                 Icon(
                   CupertinoIcons.chat_bubble_2_fill,
-                  color: Color(0xFF34C759),
+                  color: IosTheme.systemGreen,
                   size: 20,
                 ),
                 SizedBox(width: 8),
@@ -195,7 +207,7 @@ class _CoursesScreenState extends State<CoursesScreen> {
                     'Share on WhatsApp / Telegram',
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: Color(0xFF34C759),
+                      color: IosTheme.systemGreen,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -211,7 +223,7 @@ class _CoursesScreenState extends State<CoursesScreen> {
             'Cancel',
             style: TextStyle(
               fontWeight: FontWeight.w600,
-              color: Color(0xFF007AFF),
+              color: IosTheme.primaryBlue,
             ),
           ),
         ),
@@ -219,89 +231,24 @@ class _CoursesScreenState extends State<CoursesScreen> {
     );
   }
 
-  // ==================== iOS Toast Notification ====================
-  void _showIosToast({
-    required String title,
-    required String message,
-    IconData icon = CupertinoIcons.checkmark_alt_circle_fill,
-    Color iconColor = const Color(0xFF34C759),
-  }) {
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        elevation: 6,
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        backgroundColor: const Color(0xFF1C1C1E),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        duration: const Duration(seconds: 3),
-        content: Row(
-          children: [
-            Icon(icon, color: iconColor, size: 24),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    message,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFFE5E5EA),
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    final boards = _availableExamBoards;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: IosTheme.groupedBg,
       body: SafeArea(
         bottom: false,
         child: Column(
           children: [
-            // 1. iOS Large Header with Title & Refresh
             _buildIosHeader(),
-
-            // 2. Native iOS Search Bar
             _buildSearchBar(),
-
-            // 3. Segmented Tabs (All, Free, Paid)
             _buildSegmentedTabs(),
-
-            const Divider(
-              height: 1,
-              thickness: 0.5,
-              color: Color(0xFFE5E5EA),
-            ),
-
-            // 4. Content Area
+            if (boards.isNotEmpty) _buildExamBoardChips(boards),
+            const Divider(height: 1, thickness: 0.5, color: IosTheme.separator),
             Expanded(
               child: _isLoading
-                  ? const Center(
-                      child: CupertinoActivityIndicator(radius: 14),
-                    )
+                  ? const Center(child: CupertinoActivityIndicator(radius: 14))
                   : _errorMessage != null
                       ? _buildErrorView()
                       : _buildListView(),
@@ -312,7 +259,6 @@ class _CoursesScreenState extends State<CoursesScreen> {
     );
   }
 
-  // ==================== Header Widget ====================
   Widget _buildIosHeader() {
     final canPop = Navigator.canPop(context);
     return Container(
@@ -339,16 +285,15 @@ class _CoursesScreenState extends State<CoursesScreen> {
                   children: [
                     Icon(
                       CupertinoIcons.chevron_left,
-                      color: Color(0xFF007AFF),
+                      color: IosTheme.primaryBlue,
                       size: 22,
                     ),
                     SizedBox(width: 4),
                     Text(
                       'Back',
                       style: TextStyle(
-                        color: Color(0xFF007AFF),
+                        color: IosTheme.primaryBlue,
                         fontSize: 17,
-                        fontWeight: FontWeight.normal,
                       ),
                     ),
                   ],
@@ -359,27 +304,27 @@ class _CoursesScreenState extends State<CoursesScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Expanded(
+              const Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Explore Courses',
                       style: TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF1C1C1E),
+                        color: IosTheme.labelPrimary,
                         letterSpacing: -0.6,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    SizedBox(height: 2),
                     Text(
-                      'High-yield video lectures & comprehensive syllabus',
+                      'Video lectures & structured exam syllabus',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 13,
-                        color: Colors.grey[600],
+                        color: IosTheme.labelTertiary,
                         letterSpacing: -0.2,
                       ),
                     ),
@@ -393,13 +338,13 @@ class _CoursesScreenState extends State<CoursesScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF2F2F7),
+                    color: IosTheme.groupedBg,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(
                     CupertinoIcons.arrow_clockwise,
                     size: 18,
-                    color: Color(0xFF007AFF),
+                    color: IosTheme.primaryBlue,
                   ),
                 ),
               ),
@@ -410,71 +355,106 @@ class _CoursesScreenState extends State<CoursesScreen> {
     );
   }
 
-  // ==================== Native Search Bar ====================
   Widget _buildSearchBar() {
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: CupertinoSearchTextField(
         controller: _searchController,
-        placeholder: 'Search courses, subjects, topics...',
-        backgroundColor: const Color(0xFFF2F2F7),
+        placeholder: 'Search courses, subjects, exam boards...',
+        backgroundColor: IosTheme.groupedBg,
         borderRadius: BorderRadius.circular(12),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        style: const TextStyle(
-          fontSize: 15,
-          color: Color(0xFF1C1C1E),
-        ),
-        placeholderStyle: const TextStyle(
-          fontSize: 15,
-          color: Color(0xFF8E8E93),
-        ),
-        onChanged: (value) {
-          setState(() {
-            _searchQuery = value;
-          });
-        },
+        style: const TextStyle(fontSize: 15, color: IosTheme.labelPrimary),
+        placeholderStyle:
+            const TextStyle(fontSize: 15, color: IosTheme.labelTertiary),
+        onChanged: (value) => setState(() => _searchQuery = value),
         onSuffixTap: () {
           _searchController.clear();
-          setState(() {
-            _searchQuery = '';
-          });
+          setState(() => _searchQuery = '');
         },
       ),
     );
   }
 
-  // ==================== Sliding Segmented Control ====================
   Widget _buildSegmentedTabs() {
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final control = CupertinoSlidingSegmentedControl<int>(
-            groupValue: _selectedSegment,
-            backgroundColor: const Color(0xFFEFEFF4),
-            thumbColor: Colors.white,
-            padding: const EdgeInsets.all(3),
-            children: {
-              0: _buildSegmentItem('All', _allCount, 0),
-              1: _buildSegmentItem('Free', _freeCount, 1),
-              2: _buildSegmentItem('Paid', _paidCount, 2),
-            },
-            onValueChanged: (val) {
-              if (val != null) {
-                setState(() {
-                  _selectedSegment = val;
-                });
-              }
-            },
-          );
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+      child: SizedBox(
+        width: double.infinity,
+        child: CupertinoSlidingSegmentedControl<int>(
+          groupValue: _selectedSegment,
+          backgroundColor: const Color(0xFFEFEFF4),
+          thumbColor: Colors.white,
+          padding: const EdgeInsets.all(3),
+          children: {
+            0: _buildSegmentItem('All', _allCount, 0),
+            1: _buildSegmentItem('Free', _freeCount, 1),
+            2: _buildSegmentItem('Paid', _paidCount, 2),
+          },
+          onValueChanged: (val) {
+            if (val != null) setState(() => _selectedSegment = val);
+          },
+        ),
+      ),
+    );
+  }
 
-          return SizedBox(
-            width: double.infinity,
-            child: control,
-          );
-        },
+  Widget _buildExamBoardChips(List<ExamBoard> boards) {
+    return Container(
+      color: Colors.white,
+      height: 40,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        children: [
+          _buildFilterChip(
+            label: 'All Exams',
+            selected: _selectedExamBoardId == null,
+            onTap: () => setState(() => _selectedExamBoardId = null),
+          ),
+          ...boards.map(
+            (board) => Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: _buildFilterChip(
+                label: board.name,
+                selected: _selectedExamBoardId == board.id,
+                onTap: () => setState(() {
+                  _selectedExamBoardId =
+                      _selectedExamBoardId == board.id ? null : board.id;
+                }),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: Size.zero,
+      onPressed: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? IosTheme.primaryBlue : IosTheme.groupedBg,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: selected ? Colors.white : IosTheme.labelPrimary,
+          ),
+        ),
       ),
     );
   }
@@ -495,8 +475,8 @@ class _CoursesScreenState extends State<CoursesScreen> {
                 fontSize: 13,
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                 color: isSelected
-                    ? const Color(0xFF1C1C1E)
-                    : const Color(0xFF8E8E93),
+                    ? IosTheme.labelPrimary
+                    : IosTheme.labelTertiary,
               ),
             ),
             if (count > 0 || index == 0) ...[
@@ -506,7 +486,7 @@ class _CoursesScreenState extends State<CoursesScreen> {
                     const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? const Color(0xFF007AFF)
+                      ? IosTheme.primaryBlue
                       : const Color(0xFFD1D1D6),
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -526,30 +506,21 @@ class _CoursesScreenState extends State<CoursesScreen> {
     );
   }
 
-  // ==================== Main List View ====================
   Widget _buildListView() {
     final list = _filteredCourses;
-
-    if (list.isEmpty) {
-      return _buildEmptyState();
-    }
+    if (list.isEmpty) return _buildEmptyState();
 
     return CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(
         parent: BouncingScrollPhysics(),
       ),
       slivers: [
-        CupertinoSliverRefreshControl(
-          onRefresh: _loadCourses,
-        ),
+        CupertinoSliverRefreshControl(onRefresh: _loadCourses),
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                final course = list[index];
-                return _buildCourseCard(course);
-              },
+              (context, index) => _buildCourseCard(list[index]),
               childCount: list.length,
             ),
           ),
@@ -558,26 +529,15 @@ class _CoursesScreenState extends State<CoursesScreen> {
     );
   }
 
-  // ==================== iOS Native Course Card ====================
   Widget _buildCourseCard(Course course) {
     final bool isFree = course.price <= 0;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 18),
+      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: const Color(0xFFE5E5EA),
-          width: 1,
-        ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0A000000),
-            blurRadius: 12,
-            offset: Offset(0, 4),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: IosTheme.separator, width: 0.8),
       ),
       child: Material(
         color: Colors.transparent,
@@ -586,35 +546,31 @@ class _CoursesScreenState extends State<CoursesScreen> {
             Navigator.push(
               context,
               CupertinoPageRoute(
-                builder: (context) => CourseDetailScreen(course: course),
+                builder: (_) => CourseDetailScreen(course: course),
               ),
             );
           },
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(18),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Thumbnail Image with Overlay Badges
               Stack(
                 children: [
                   ClipRRect(
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(19),
-                    ),
+                    borderRadius:
+                        const BorderRadius.vertical(top: Radius.circular(17)),
                     child: AspectRatio(
                       aspectRatio: 16 / 9,
                       child: course.effectiveThumbnail != null
                           ? Image.network(
                               course.effectiveThumbnail!,
                               fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) =>
+                              errorBuilder: (_, __, ___) =>
                                   _buildThumbnailPlaceholder(course),
                             )
                           : _buildThumbnailPlaceholder(course),
                     ),
                   ),
-
-                  // Top-Right Price / Free Badge
                   Positioned(
                     top: 12,
                     right: 12,
@@ -625,16 +581,9 @@ class _CoursesScreenState extends State<CoursesScreen> {
                       ),
                       decoration: BoxDecoration(
                         color: isFree
-                            ? const Color(0xFF34C759)
-                            : const Color(0xFF1C1C1E).withValues(alpha: 0.85),
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x26000000),
-                            blurRadius: 6,
-                            offset: Offset(0, 2),
-                          ),
-                        ],
+                            ? IosTheme.systemGreen
+                            : IosTheme.labelPrimary.withValues(alpha: 0.88),
+                        borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
                         isFree ? 'FREE' : '₹${course.price.toStringAsFixed(0)}',
@@ -646,9 +595,8 @@ class _CoursesScreenState extends State<CoursesScreen> {
                       ),
                     ),
                   ),
-
-                  // Top-Left Category / Level Badge if available
-                  if (course.level != null && course.level!.isNotEmpty)
+                  if (course.examBoard != null &&
+                      course.examBoard!.name.isNotEmpty)
                     Positioned(
                       top: 12,
                       left: 12,
@@ -658,30 +606,26 @@ class _CoursesScreenState extends State<CoursesScreen> {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.92),
+                          color: Colors.white.withValues(alpha: 0.94),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          course.level!.toUpperCase(),
+                          course.examBoard!.name,
                           style: const TextStyle(
-                            color: Color(0xFF1C1C1E),
-                            fontSize: 10,
+                            color: IosTheme.labelPrimary,
+                            fontSize: 10.5,
                             fontWeight: FontWeight.w700,
-                            letterSpacing: 0.5,
                           ),
                         ),
                       ),
                     ),
                 ],
               ),
-
-              // 2. Course Details
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Title
                     Text(
                       course.title,
                       maxLines: 2,
@@ -689,14 +633,12 @@ class _CoursesScreenState extends State<CoursesScreen> {
                       style: const TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFF1C1C1E),
+                        color: IosTheme.labelPrimary,
                         letterSpacing: -0.3,
                         height: 1.3,
                       ),
                     ),
                     const SizedBox(height: 6),
-
-                    // Description
                     if (course.description.isNotEmpty)
                       Text(
                         course.description,
@@ -704,23 +646,30 @@ class _CoursesScreenState extends State<CoursesScreen> {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 13,
-                          color: Color(0xFF8E8E93),
+                          color: IosTheme.labelTertiary,
                           height: 1.35,
                         ),
                       ),
-
                     const SizedBox(height: 12),
-
-                    // Metadata Specs (Videos, Duration, Tests)
                     Wrap(
                       spacing: 8,
                       runSpacing: 6,
                       children: [
+                        if (course.subjects != null &&
+                            course.subjects!.isNotEmpty)
+                          ...course.subjects!.take(3).map(
+                                (s) => _buildMiniBadge(
+                                  CupertinoIcons.book,
+                                  s.videosCount != null
+                                      ? '${s.name} (${s.videosCount})'
+                                      : s.name,
+                                ),
+                              ),
                         if (course.totalVideos != null &&
                             course.totalVideos! > 0)
                           _buildMiniBadge(
                             CupertinoIcons.play_circle_fill,
-                            '${course.totalVideos} Lessons',
+                            '${course.totalVideos} Videos',
                           ),
                         if (course.duration != null &&
                             course.duration!.isNotEmpty)
@@ -728,55 +677,59 @@ class _CoursesScreenState extends State<CoursesScreen> {
                             CupertinoIcons.time,
                             course.duration!,
                           ),
-                        if (course.totalTests != null && course.totalTests! > 0)
-                          _buildMiniBadge(
-                            CupertinoIcons.doc_checkmark_fill,
-                            '${course.totalTests} Tests',
-                          ),
-                        if (course.language != null &&
-                            course.language!.isNotEmpty)
-                          _buildMiniBadge(
-                            CupertinoIcons.globe,
-                            course.language!,
-                          ),
                       ],
                     ),
-
                     const SizedBox(height: 14),
                     const Divider(
                       height: 1,
                       thickness: 0.5,
-                      color: Color(0xFFE5E5EA),
+                      color: IosTheme.separator,
                     ),
                     const SizedBox(height: 10),
-
-                    // Bottom Action Row: Rating, Share & CTA Button
                     Row(
                       children: [
-                        // Rating Badge
-                        const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              CupertinoIcons.star_fill,
-                              color: Color(0xFFFF9500),
-                              size: 15,
+                        if (course.isPurchased)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 4,
                             ),
-                            SizedBox(width: 4),
-                            Text(
-                              '4.8',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF1C1C1E),
-                              ),
+                            decoration: BoxDecoration(
+                              color: IosTheme.systemGreen.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                          ],
-                        ),
-
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  CupertinoIcons.checkmark_alt_circle_fill,
+                                  color: IosTheme.systemGreen,
+                                  size: 13,
+                                ),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Enrolled',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: IosTheme.systemGreen,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          Text(
+                            isFree
+                                ? 'Free Access'
+                                : '₹${course.price.toStringAsFixed(0)} ${course.currency}',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: IosTheme.labelPrimary,
+                            ),
+                          ),
                         const Spacer(),
-
-                        // Share Button
                         CupertinoButton(
                           padding: EdgeInsets.zero,
                           minimumSize: const Size(36, 36),
@@ -785,19 +738,17 @@ class _CoursesScreenState extends State<CoursesScreen> {
                             width: 36,
                             height: 36,
                             decoration: BoxDecoration(
-                              color: const Color(0xFFF2F2F7),
+                              color: IosTheme.groupedBg,
                               borderRadius: BorderRadius.circular(18),
                             ),
                             child: const Icon(
                               CupertinoIcons.share,
                               size: 18,
-                              color: Color(0xFF007AFF),
+                              color: IosTheme.primaryBlue,
                             ),
                           ),
                         ),
                         const SizedBox(width: 8),
-
-                        // CTA Button
                         CupertinoButton(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 14,
@@ -805,14 +756,14 @@ class _CoursesScreenState extends State<CoursesScreen> {
                           ),
                           minimumSize: const Size(36, 36),
                           color: isFree
-                              ? const Color(0xFF34C759)
-                              : const Color(0xFF007AFF),
+                              ? IosTheme.systemGreen
+                              : IosTheme.primaryBlue,
                           borderRadius: BorderRadius.circular(18),
                           onPressed: () {
                             Navigator.push(
                               context,
                               CupertinoPageRoute(
-                                builder: (context) =>
+                                builder: (_) =>
                                     CourseDetailScreen(course: course),
                               ),
                             );
@@ -821,7 +772,9 @@ class _CoursesScreenState extends State<CoursesScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                isFree ? 'Enroll Free' : 'View Course',
+                                course.isPurchased
+                                    ? 'Open Course'
+                                    : (isFree ? 'Enroll Free' : 'View Course'),
                                 style: const TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.bold,
@@ -851,20 +804,14 @@ class _CoursesScreenState extends State<CoursesScreen> {
 
   Widget _buildThumbnailPlaceholder(Course course) {
     return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF007AFF), Color(0xFF5856D6)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
+      color: IosTheme.primaryBlue,
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Icon(
               CupertinoIcons.play_circle_fill,
-              size: 48,
+              size: 46,
               color: Colors.white,
             ),
             const SizedBox(height: 8),
@@ -892,24 +839,20 @@ class _CoursesScreenState extends State<CoursesScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFFF2F2F7),
+        color: IosTheme.groupedBg,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            size: 12,
-            color: const Color(0xFF8E8E93),
-          ),
+          Icon(icon, size: 12, color: IosTheme.labelTertiary),
           const SizedBox(width: 4),
           Text(
             text,
             style: const TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF3C3C43),
+              color: IosTheme.labelSecondary,
             ),
           ),
         ],
@@ -917,7 +860,6 @@ class _CoursesScreenState extends State<CoursesScreen> {
     );
   }
 
-  // ==================== Empty State ====================
   Widget _buildEmptyState() {
     IconData emptyIcon;
     String emptyTitle;
@@ -925,29 +867,28 @@ class _CoursesScreenState extends State<CoursesScreen> {
     String buttonText;
     VoidCallback onButtonTap;
 
-    if (_searchQuery.trim().isNotEmpty) {
+    if (_searchQuery.trim().isNotEmpty || _selectedExamBoardId != null) {
       emptyIcon = CupertinoIcons.search;
       emptyTitle = 'No Matches Found';
-      emptySubtitle =
-          'No courses matched "$_searchQuery". Check spelling or search a different subject.';
-      buttonText = 'Clear Search';
+      emptySubtitle = _searchQuery.trim().isNotEmpty
+          ? 'No courses matched "$_searchQuery".'
+          : 'No courses available for the selected exam board.';
+      buttonText = 'Clear Filters';
       onButtonTap = () {
         _searchController.clear();
         setState(() {
           _searchQuery = '';
+          _selectedExamBoardId = null;
+          _selectedSegment = 0;
         });
       };
     } else if (_selectedSegment == 1) {
       emptyIcon = CupertinoIcons.gift;
       emptyTitle = 'No Free Courses Currently';
       emptySubtitle =
-          'Free courses are added periodically. Check out our full course catalog.';
+          'Free courses are added periodically. Check out our full catalog.';
       buttonText = 'Browse All Courses';
-      onButtonTap = () {
-        setState(() {
-          _selectedSegment = 0;
-        });
-      };
+      onButtonTap = () => setState(() => _selectedSegment = 0);
     } else {
       emptyIcon = CupertinoIcons.book;
       emptyTitle = 'No Courses Available';
@@ -967,14 +908,11 @@ class _CoursesScreenState extends State<CoursesScreen> {
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                color: const Color(0xFFF2F2F7),
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(40),
+                border: Border.all(color: IosTheme.separator),
               ),
-              child: Icon(
-                emptyIcon,
-                size: 38,
-                color: const Color(0xFF8E8E93),
-              ),
+              child: Icon(emptyIcon, size: 38, color: IosTheme.labelTertiary),
             ),
             const SizedBox(height: 18),
             Text(
@@ -982,7 +920,7 @@ class _CoursesScreenState extends State<CoursesScreen> {
               style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF1C1C1E),
+                color: IosTheme.labelPrimary,
                 letterSpacing: -0.4,
               ),
               textAlign: TextAlign.center,
@@ -992,7 +930,7 @@ class _CoursesScreenState extends State<CoursesScreen> {
               emptySubtitle,
               style: const TextStyle(
                 fontSize: 13,
-                color: Color(0xFF8E8E93),
+                color: IosTheme.labelTertiary,
                 height: 1.4,
               ),
               textAlign: TextAlign.center,
@@ -1000,7 +938,7 @@ class _CoursesScreenState extends State<CoursesScreen> {
             const SizedBox(height: 20),
             CupertinoButton(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              color: const Color(0xFF007AFF),
+              color: IosTheme.primaryBlue,
               borderRadius: BorderRadius.circular(20),
               onPressed: onButtonTap,
               child: Text(
@@ -1018,7 +956,6 @@ class _CoursesScreenState extends State<CoursesScreen> {
     );
   }
 
-  // ==================== Error View ====================
   Widget _buildErrorView() {
     return Center(
       child: SingleChildScrollView(
@@ -1029,7 +966,7 @@ class _CoursesScreenState extends State<CoursesScreen> {
           children: [
             const Icon(
               CupertinoIcons.exclamationmark_triangle,
-              color: Color(0xFFFF3B30),
+              color: IosTheme.systemRed,
               size: 48,
             ),
             const SizedBox(height: 12),
@@ -1038,22 +975,20 @@ class _CoursesScreenState extends State<CoursesScreen> {
               style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF1C1C1E),
+                color: IosTheme.labelPrimary,
               ),
             ),
             const SizedBox(height: 6),
             Text(
               _errorMessage ?? 'Please check your internet connection.',
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                color: Color(0xFF8E8E93),
-              ),
+              style:
+                  const TextStyle(fontSize: 13, color: IosTheme.labelTertiary),
             ),
             const SizedBox(height: 16),
             CupertinoButton(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-              color: const Color(0xFF007AFF),
+              color: IosTheme.primaryBlue,
               borderRadius: BorderRadius.circular(20),
               onPressed: _loadCourses,
               child: const Text(

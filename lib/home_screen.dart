@@ -263,8 +263,8 @@ class _HomeScreenState extends State<HomeScreen>
             borderRadius: BorderRadius.circular(16),
             gradient: LinearGradient(
               colors: [
-                Theme.of(context).primaryColor.withOpacity(0.9),
-                Theme.of(context).primaryColor.withOpacity(0.6),
+                Theme.of(context).primaryColor.withValues(alpha: 0.9),
+                Theme.of(context).primaryColor.withValues(alpha: 0.6),
               ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
@@ -292,7 +292,7 @@ class _HomeScreenState extends State<HomeScreen>
                         Text(
                           "Master Object-Oriented Programming",
                           style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: Colors.white.withOpacity(0.9)),
+                              ?.copyWith(color: Colors.white.withValues(alpha: 0.9)),
                         ),
                       ],
                     ),
@@ -300,7 +300,7 @@ class _HomeScreenState extends State<HomeScreen>
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(
@@ -332,7 +332,7 @@ class _HomeScreenState extends State<HomeScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
+        color: Colors.white.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -388,8 +388,8 @@ class _HomeScreenState extends State<HomeScreen>
             borderRadius: BorderRadius.circular(16),
             gradient: LinearGradient(
               colors: [
-                course.color.withOpacity(0.85),
-                course.color.withOpacity(0.5),
+                course.color.withValues(alpha: 0.85),
+                course.color.withValues(alpha: 0.5),
               ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
@@ -403,7 +403,7 @@ class _HomeScreenState extends State<HomeScreen>
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.25),
+                  color: Colors.white.withValues(alpha: 0.25),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(course.icon, color: Colors.white, size: 28),
@@ -426,7 +426,7 @@ class _HomeScreenState extends State<HomeScreen>
                   Text(
                     course.subtitle,
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.85),
+                      color: Colors.white.withValues(alpha: 0.85),
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                     ),
@@ -445,7 +445,7 @@ class _HomeScreenState extends State<HomeScreen>
                       Text(
                         "${course.rating}",
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.9),
+                          color: Colors.white.withValues(alpha: 0.9),
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),
@@ -484,7 +484,7 @@ class SliderCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.15),
+            color: Colors.black.withValues(alpha: 0.15),
             blurRadius: 16,
             offset: const Offset(0, 8),
           ),
@@ -502,8 +502,8 @@ class SliderCard extends StatelessWidget {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withOpacity(0.2),
-                    Colors.black.withOpacity(0.5),
+                    Colors.black.withValues(alpha: 0.2),
+                    Colors.black.withValues(alpha: 0.5),
                   ],
                 ),
               ),
@@ -527,7 +527,7 @@ class SliderCard extends StatelessWidget {
                   Text(
                     subtitle,
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.9),
+                      color: Colors.white.withValues(alpha: 0.9),
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
                       letterSpacing: 0.2,

@@ -5,6 +5,7 @@ import '../../registration/login_screen.dart';
 import '../../services/api_service.dart';
 import '../../widgets/ios_components.dart';
 import 'test_questions_screen.dart';
+import 'test_report_screen.dart';
 
 class TestInstructionsScreen extends StatefulWidget {
   final int testId;
@@ -26,6 +27,8 @@ class _TestInstructionsScreenState extends State<TestInstructionsScreen> {
   bool _isLoading = true;
   bool _isStarting = false;
   bool _requiresLogin = false;
+  bool _alreadyAttempted = false;
+  int? _existingAttemptId;
   TestInSeries? _testDetails;
   List<TestQuestion> _prefetchedQuestions = [];
   String? _error;
@@ -35,6 +38,10 @@ class _TestInstructionsScreenState extends State<TestInstructionsScreen> {
   void initState() {
     super.initState();
     _testDetails = widget.fallbackTest;
+    if (widget.fallbackTest?.hasAttempted == true) {
+      _alreadyAttempted = true;
+      _existingAttemptId = widget.fallbackTest?.attemptId;
+    }
     _fetchTestDetails();
   }
 
@@ -57,23 +64,45 @@ class _TestInstructionsScreenState extends State<TestInstructionsScreen> {
     }
 
     try {
-      final response = await ApiService.getTestQuestions(widget.testId);
+      final results = await Future.wait([
+        ApiService.getTestQuestions(widget.testId),
+        ApiService.getAttemptedTestsMap(),
+      ]);
       if (!mounted) return;
+
+      final response = results[0] as Map<String, dynamic>;
+      final attemptedMap = results[1] as Map<int, int>;
+
+      final bool lockedLocallyOrServer =
+          attemptedMap.containsKey(widget.testId) ||
+              (widget.fallbackTest?.hasAttempted == true);
+      final int? prevAttemptId =
+          attemptedMap[widget.testId] ?? widget.fallbackTest?.attemptId;
 
       if (response['success'] == true && response['data'] != null) {
         final testData = response['data']['test'];
         final rawQs = response['data']['questions'] as List? ?? [];
+        TestInSeries? parsedTest = _testDetails;
+        if (testData is Map<String, dynamic>) {
+          parsedTest = TestInSeries.fromJson(testData);
+        }
         setState(() {
-          if (testData is Map<String, dynamic>) {
-            _testDetails = TestInSeries.fromJson(testData);
-          }
+          _testDetails = parsedTest;
           _prefetchedQuestions =
               rawQs.map((e) => TestQuestion.fromJson(e)).toList();
+          _alreadyAttempted =
+              lockedLocallyOrServer || (parsedTest?.hasAttempted == true);
+          _existingAttemptId =
+              (prevAttemptId != null && prevAttemptId > 0)
+                  ? prevAttemptId
+                  : parsedTest?.attemptId;
           _isLoading = false;
         });
       } else {
         setState(() {
           _requiresLogin = response['status_code'] == 401;
+          _alreadyAttempted = lockedLocallyOrServer;
+          _existingAttemptId = prevAttemptId;
           _error = ApiService.extractErrorMessage(
             response,
             fallback: 'Failed to load test instructions.',
@@ -91,10 +120,28 @@ class _TestInstructionsScreenState extends State<TestInstructionsScreen> {
   }
 
   Future<void> _startTest() async {
-    if (_testDetails == null || _isStarting) return;
+    if (_testDetails == null || _isStarting || _alreadyAttempted) return;
 
     setState(() => _isStarting = true);
     try {
+      // Double-check single-attempt lock before starting
+      final attemptedMap = await ApiService.getAttemptedTestsMap();
+      if (!mounted) return;
+      if (attemptedMap.containsKey(widget.testId)) {
+        setState(() {
+          _alreadyAttempted = true;
+          _existingAttemptId = attemptedMap[widget.testId];
+        });
+        showIosToast(
+          context,
+          title: 'Already Attempted',
+          message: 'Each test can only be attempted once.',
+          icon: CupertinoIcons.lock_fill,
+          iconColor: IosTheme.systemOrange,
+        );
+        return;
+      }
+
       // POST /tests/{id}/start -> initializes attempt and returns questions
       final startRes = await ApiService.startTest(widget.testId);
       if (!mounted) return;
@@ -105,6 +152,9 @@ class _TestInstructionsScreenState extends State<TestInstructionsScreen> {
         final attemptId = attemptMap['id'] is int
             ? attemptMap['id'] as int
             : int.tryParse('${attemptMap['id'] ?? 0}') ?? 0;
+
+        await ApiService.markTestAttempted(widget.testId, attemptId: attemptId);
+        if (!mounted) return;
 
         final rawQuestions = data['questions'] as List?;
         final questions = rawQuestions != null && rawQuestions.isNotEmpty
@@ -171,18 +221,14 @@ class _TestInstructionsScreenState extends State<TestInstructionsScreen> {
                                   width: 0.6,
                                 ),
                               ),
-                              child: Text(
-                                _testDetails?.instructions ??
-                                    '1. Read all questions carefully before answering.\n'
-                                        '2. Your selected answers are saved automatically in real time.\n'
-                                        '3. Negative marks apply for incorrect responses where specified.\n'
-                                        '4. The test auto-submits when the timer reaches 00:00.',
-                                style: const TextStyle(
-                                  fontSize: 14.5,
-                                  height: 1.55,
-                                  color: IosTheme.labelSecondary,
+                                child: Text(
+                                  '${_testDetails?.instructions ?? '1. Read all questions carefully before answering.\n2. Your selected answers are saved automatically in real time.\n3. Negative marks apply for incorrect responses where specified.\n4. The test auto-submits when the timer reaches 00:00.'}\n\nAnti-Cheating & Single Attempt Policy:\n• Each test can only be attempted once.\n• Pressing Back or switching to another app/screen will immediately end and auto-submit your test.',
+                                  style: const TextStyle(
+                                    fontSize: 14.5,
+                                    height: 1.55,
+                                    color: IosTheme.labelSecondary,
+                                  ),
                                 ),
-                              ),
                             ),
                           ],
                         ),
@@ -290,6 +336,70 @@ class _TestInstructionsScreenState extends State<TestInstructionsScreen> {
   }
 
   Widget _buildBottomBar() {
+    if (_alreadyAttempted) {
+      final attemptId = _existingAttemptId ?? 0;
+      return Container(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          border: Border(
+            top: BorderSide(color: Color(0x26000000), width: 0.5),
+          ),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Row(
+                children: [
+                  Icon(
+                    CupertinoIcons.lock_fill,
+                    color: IosTheme.systemOrange,
+                    size: 18,
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'You have already attempted this test. Retakes are not allowed.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: IosTheme.systemOrange,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              IosPrimaryButton(
+                label: attemptId > 0 ? 'View Scorecard' : 'Already Attempted',
+                color: attemptId > 0
+                    ? IosTheme.systemGreen
+                    : IosTheme.labelTertiary,
+                icon: attemptId > 0
+                    ? CupertinoIcons.doc_chart_fill
+                    : CupertinoIcons.lock_fill,
+                onPressed: attemptId > 0
+                    ? () {
+                        Navigator.pushReplacement(
+                          context,
+                          CupertinoPageRoute(
+                            builder: (_) => TestReportScreen(
+                              attemptId: attemptId,
+                              testTitle: widget.testTitle,
+                            ),
+                          ),
+                        );
+                      }
+                    : null,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
       decoration: const BoxDecoration(
@@ -321,7 +431,7 @@ class _TestInstructionsScreenState extends State<TestInstructionsScreen> {
                   const SizedBox(width: 10),
                   const Expanded(
                     child: Text(
-                      'I have read and understood all exam instructions',
+                      'I understand that leaving or switching screens ends the test',
                       style: TextStyle(
                         fontSize: 13.5,
                         fontWeight: FontWeight.w500,

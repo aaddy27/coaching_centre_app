@@ -27,9 +27,13 @@ class TestQuestionsScreen extends StatefulWidget {
   State<TestQuestionsScreen> createState() => _TestQuestionsScreenState();
 }
 
-class _TestQuestionsScreenState extends State<TestQuestionsScreen> {
+class _TestQuestionsScreenState extends State<TestQuestionsScreen>
+    with WidgetsBindingObserver {
   bool _isLoading = true;
   bool _isSubmitting = false;
+  bool _hasEnded = false;
+  String? _endReason;
+  String? _submissionError;
   int? _attemptId;
   List<TestQuestion> _questions = [];
   final Map<int, String> _answers = {};
@@ -44,6 +48,7 @@ class _TestQuestionsScreenState extends State<TestQuestionsScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _remainingSeconds = (widget.duration > 0 ? widget.duration : 30) * 60;
     _attemptId = widget.attemptId;
 
@@ -53,9 +58,27 @@ class _TestQuestionsScreenState extends State<TestQuestionsScreen> {
         _attemptId! > 0) {
       _questions = widget.initialQuestions!;
       _isLoading = false;
+      ApiService.markTestAttempted(widget.testId, attemptId: _attemptId);
       _startTimer();
     } else {
       _initAttemptAndQuestions();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused) {
+      if (!_isLoading &&
+          !_hasEnded &&
+          !_isSubmitting &&
+          _questions.isNotEmpty) {
+        _autoEndAndSubmit(
+          reason:
+              'Test auto-submitted because you switched apps or left the exam screen.',
+        );
+      }
     }
   }
 
@@ -70,13 +93,16 @@ class _TestQuestionsScreenState extends State<TestQuestionsScreen> {
         setState(() => _remainingSeconds--);
       } else {
         timer.cancel();
-        _submitTest(auto: true);
+        _autoEndAndSubmit(
+          reason: 'Test auto-submitted because the time limit expired.',
+        );
       }
     });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     _pageController.dispose();
     super.dispose();
@@ -96,11 +122,18 @@ class _TestQuestionsScreenState extends State<TestQuestionsScreen> {
         final data = response['data'] as Map<String, dynamic>;
         final attemptMap = data['attempt'] as Map<String, dynamic>? ?? {};
         final list = data['questions'] as List? ?? [];
+        final parsedAttemptId = attemptMap['id'] is int
+            ? attemptMap['id'] as int
+            : int.tryParse('${attemptMap['id'] ?? 0}');
+
+        await ApiService.markTestAttempted(
+          widget.testId,
+          attemptId: parsedAttemptId,
+        );
+        if (!mounted) return;
 
         setState(() {
-          _attemptId = attemptMap['id'] is int
-              ? attemptMap['id'] as int
-              : int.tryParse('${attemptMap['id'] ?? 0}');
+          _attemptId = parsedAttemptId;
           _questions = list.map((e) => TestQuestion.fromJson(e)).toList();
           _isLoading = false;
         });
@@ -124,6 +157,7 @@ class _TestQuestionsScreenState extends State<TestQuestionsScreen> {
   }
 
   Future<void> _selectAnswer(int questionId, String optionKey) async {
+    if (_hasEnded || _isSubmitting) return;
     HapticFeedback.selectionClick();
     setState(() {
       _answers[questionId] = optionKey;
@@ -142,7 +176,22 @@ class _TestQuestionsScreenState extends State<TestQuestionsScreen> {
     }
   }
 
-  Future<void> _submitTest({bool auto = false}) async {
+  Future<void> _autoEndAndSubmit({required String reason}) async {
+    if (_isSubmitting) return;
+    _timer?.cancel();
+
+    setState(() {
+      _hasEnded = true;
+      _endReason = reason;
+      _submissionError = null;
+      _isSubmitting = true;
+    });
+
+    await ApiService.markTestAttempted(widget.testId, attemptId: _attemptId);
+    await _finishAndNavigate(autoReason: reason);
+  }
+
+  Future<void> _submitTest({bool auto = false, String? autoReason}) async {
     if (_isSubmitting) return;
 
     if (!auto) {
@@ -151,7 +200,7 @@ class _TestQuestionsScreenState extends State<TestQuestionsScreen> {
         builder: (ctx) => CupertinoAlertDialog(
           title: const Text('Submit Test?'),
           content: Text(
-            'You have answered ${_answers.length} out of ${_questions.length} questions.',
+            'You have answered ${_answers.length} out of ${_questions.length} questions. You cannot retake this test once submitted.',
           ),
           actions: [
             CupertinoDialogAction(
@@ -170,8 +219,18 @@ class _TestQuestionsScreenState extends State<TestQuestionsScreen> {
     }
 
     _timer?.cancel();
-    setState(() => _isSubmitting = true);
+    setState(() {
+      _hasEnded = true;
+      _endReason = autoReason;
+      _submissionError = null;
+      _isSubmitting = true;
+    });
 
+    await ApiService.markTestAttempted(widget.testId, attemptId: _attemptId);
+    await _finishAndNavigate(autoReason: autoReason);
+  }
+
+  Future<void> _finishAndNavigate({String? autoReason}) async {
     try {
       if (_attemptId != null && _attemptId! > 0) {
         final response = await ApiService.finishTestAttempt(_attemptId!);
@@ -179,29 +238,32 @@ class _TestQuestionsScreenState extends State<TestQuestionsScreen> {
 
         if (response['success'] == true && response['data'] != null) {
           final report = TestReport.fromJson(response['data']);
+          final resolvedAttemptId =
+              report.attemptId > 0 ? report.attemptId : _attemptId!;
+          await ApiService.markTestAttempted(
+            widget.testId,
+            attemptId: resolvedAttemptId,
+          );
+          if (!mounted) return;
           Navigator.pushReplacement(
             context,
             CupertinoPageRoute(
               builder: (context) => TestReportScreen(
-                attemptId: report.attemptId > 0 ? report.attemptId : _attemptId!,
+                attemptId: resolvedAttemptId,
                 testTitle: widget.testTitle,
                 initialReport: report,
+                autoSubmitReason: autoReason,
               ),
             ),
           );
           return;
         } else {
-          showIosToast(
-            context,
-            title: 'Submission Error',
-            message: ApiService.extractErrorMessage(
+          setState(() {
+            _submissionError = ApiService.extractErrorMessage(
               response,
               fallback: 'Could not submit test.',
-            ),
-            icon: CupertinoIcons.exclamationmark_circle_fill,
-            iconColor: IosTheme.systemRed,
-          );
-          if (!auto) _startTimer();
+            );
+          });
           return;
         }
       }
@@ -341,32 +403,22 @@ class _TestQuestionsScreenState extends State<TestQuestionsScreen> {
 
     return PopScope(
       canPop: false,
-      onPopInvokedWithResult: (didPop, result) async {
+      onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
-        final confirm = await showCupertinoDialog<bool>(
-          context: context,
-          builder: (ctx) => CupertinoAlertDialog(
-            title: const Text('Exit Test?'),
-            content: const Text(
-              'Are you sure you want to leave? Your attempt will remain incomplete unless submitted.',
-            ),
-            actions: [
-              CupertinoDialogAction(
-                isDefaultAction: true,
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Stay'),
-              ),
-              CupertinoDialogAction(
-                isDestructiveAction: true,
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Exit'),
-              ),
-            ],
-          ),
-        );
-        if (confirm == true && context.mounted) {
+        if (_isLoading || _error != null) {
           Navigator.pop(context);
+          return;
         }
+        if (_hasEnded) {
+          if (!_isSubmitting) {
+            Navigator.pop(context);
+          }
+          return;
+        }
+        _autoEndAndSubmit(
+          reason:
+              'Test auto-submitted because you pressed Back during the exam.',
+        );
       },
       child: Scaffold(
         backgroundColor: IosTheme.groupedBg,
@@ -428,62 +480,153 @@ class _TestQuestionsScreenState extends State<TestQuestionsScreen> {
             ],
           ),
           actions: [
-            CupertinoButton(
-              padding: const EdgeInsets.only(right: 12),
-              onPressed: _showPalette,
-              child: const Icon(
-                CupertinoIcons.square_grid_2x2,
-                color: IosTheme.primaryBlue,
-                size: 22,
+            if (!_hasEnded)
+              CupertinoButton(
+                padding: const EdgeInsets.only(right: 12),
+                onPressed: _showPalette,
+                child: const Icon(
+                  CupertinoIcons.square_grid_2x2,
+                  color: IosTheme.primaryBlue,
+                  size: 22,
+                ),
               ),
-            ),
           ],
         ),
         body: _isLoading
             ? const Center(child: CupertinoActivityIndicator(radius: 14))
-            : _error != null
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+            : _hasEnded
+                ? _buildEndedLockView()
+                : _error != null
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                _error!,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: IosTheme.labelTertiary,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              SizedBox(
+                                width: 150,
+                                child: IosPrimaryButton(
+                                  label: 'Retry',
+                                  onPressed: _initAttemptAndQuestions,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : Column(
                         children: [
-                          Text(
-                            _error!,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: IosTheme.labelTertiary,
+                          Expanded(
+                            child: PageView.builder(
+                              controller: _pageController,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: _questions.length,
+                              onPageChanged: (index) {
+                                setState(() => _currentIndex = index);
+                              },
+                              itemBuilder: (context, index) =>
+                                  _buildQuestionPage(_questions[index], index),
                             ),
                           ),
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            width: 150,
-                            child: IosPrimaryButton(
-                              label: 'Retry',
-                              onPressed: _initAttemptAndQuestions,
-                            ),
-                          ),
+                          _buildBottomBar(),
                         ],
                       ),
-                    ),
-                  )
-                : Column(
-                    children: [
-                      Expanded(
-                        child: PageView.builder(
-                          controller: _pageController,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: _questions.length,
-                          onPageChanged: (index) {
-                            setState(() => _currentIndex = index);
-                          },
-                          itemBuilder: (context, index) =>
-                              _buildQuestionPage(_questions[index], index),
-                        ),
-                      ),
-                      _buildBottomBar(),
-                    ],
+      ),
+    );
+  }
+
+  Widget _buildEndedLockView() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (_isSubmitting) ...[
+              const CupertinoActivityIndicator(radius: 16),
+              const SizedBox(height: 16),
+              const Text(
+                'Submitting Test...',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: IosTheme.labelPrimary,
+                ),
+              ),
+              if (_endReason != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _endReason!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    color: IosTheme.labelTertiary,
                   ),
+                ),
+              ],
+            ] else ...[
+              const Icon(
+                CupertinoIcons.shield_lefthalf_fill,
+                color: IosTheme.systemOrange,
+                size: 52,
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Test Ended',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: IosTheme.labelPrimary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _submissionError ??
+                    _endReason ??
+                    'Your test session has ended.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: IosTheme.labelTertiary,
+                ),
+              ),
+              const SizedBox(height: 22),
+              SizedBox(
+                width: 210,
+                child: IosPrimaryButton(
+                  label: 'Submit & View Report',
+                  onPressed: () {
+                    setState(() {
+                      _submissionError = null;
+                      _isSubmitting = true;
+                    });
+                    _finishAndNavigate(autoReason: _endReason);
+                  },
+                ),
+              ),
+              const SizedBox(height: 10),
+              CupertinoButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text(
+                  'Close',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: IosTheme.labelTertiary,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

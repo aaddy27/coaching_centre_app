@@ -138,6 +138,8 @@ class TestInSeries {
   final double negativeMarking;
   final int questionsCount;
   final String? instructions;
+  final bool hasAttempted;
+  final int? attemptId;
 
   TestInSeries({
     required this.id,
@@ -149,6 +151,8 @@ class TestInSeries {
     required this.negativeMarking,
     required this.questionsCount,
     this.instructions,
+    this.hasAttempted = false,
+    this.attemptId,
   });
 
   factory TestInSeries.fromJson(Map<String, dynamic> json) {
@@ -162,6 +166,10 @@ class TestInSeries {
       negativeMarking: _toDouble(json['negative_marking']),
       questionsCount: _toInt(json['questions_count']) ?? 0,
       instructions: json['instructions']?.toString(),
+      hasAttempted: json['has_attempted'] == true ||
+          json['is_attempted'] == true ||
+          json['attempted'] == true,
+      attemptId: _toInt(json['attempt_id']),
     );
   }
 }

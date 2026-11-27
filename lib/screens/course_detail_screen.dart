@@ -28,6 +28,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
   bool _isPurchasing = false;
   bool _hasPurchased = false;
   String? _pendingOrderId;
+  int? _lastWatchedVideoId;
   late final PaymentService _paymentService;
 
   @override
@@ -89,15 +90,71 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
 
       // 3. Load /courses/{id}/videos to get authoritative has_purchased & video lock status
       final videosRes = await ApiService.getCourseVideos(_course.id);
+      final localProgMap = await ApiService.getLocalVideoProgressMap();
+      final lastVideoId = await ApiService.getCourseLastVideoId(_course.id);
+
       if (videosRes['success'] == true && videosRes['data'] != null) {
         final data = videosRes['data'] as Map<String, dynamic>;
         final hasPurchasedApi = data['has_purchased'] == true;
         final List rawVideos = data['videos'] ?? [];
-        _courseVideos = rawVideos.map((v) => Video.fromJson(v)).toList();
+        _courseVideos = rawVideos.map((v) {
+          final parsed = Video.fromJson(v);
+          final local = localProgMap[parsed.id];
+          if (local == null) return parsed;
+          final lp = local['progress'] is int ? local['progress'] as int : 0;
+          final ls = local['watched_seconds'] is int
+              ? local['watched_seconds'] as int
+              : 0;
+          final lc = local['completed'] == true;
+          return parsed.copyWithProgress(
+            watchProgress: lp > parsed.watchProgress ? lp : parsed.watchProgress,
+            watchedSeconds:
+                ls > parsed.watchedSeconds ? ls : parsed.watchedSeconds,
+            isWatched: parsed.isWatched || lc || lp >= 90,
+          );
+        }).toList();
         _hasPurchased =
             hasPurchasedApi || _course.isPurchased || _course.price <= 0;
+        _lastWatchedVideoId = lastVideoId;
+
+        if (_courseVideos.isNotEmpty) {
+          final completedCount = _courseVideos
+              .where((v) => v.isWatched || v.watchProgress >= 90)
+              .length;
+          await ApiService.saveCourseProgressSummary(
+            courseId: _course.id,
+            completedVideos: completedCount,
+            totalVideos: _courseVideos.length,
+          );
+        }
       } else {
         _hasPurchased = _course.isPurchased || _course.price <= 0;
+        _lastWatchedVideoId = lastVideoId;
+      }
+
+      // 4. Recompute subject-level progress from merged course videos
+      if (_subjects.isNotEmpty && _courseVideos.isNotEmpty) {
+        _subjects = _subjects.map((subj) {
+          final subVideos =
+              _courseVideos.where((v) => v.subjectId == subj.id).toList();
+          if (subVideos.isEmpty) return subj;
+          final comp = subVideos
+              .where((v) => v.isWatched || v.watchProgress >= 90)
+              .length;
+          final pct = ((comp / subVideos.length) * 100).round().clamp(0, 100);
+          return Subject(
+            id: subj.id,
+            name: subj.name,
+            slug: subj.slug,
+            description: subj.description,
+            totalVideos: subVideos.length,
+            totalDuration: subj.totalDuration,
+            completedVideos: comp,
+            progressPercentage: pct,
+            thumbnail: subj.thumbnail,
+            order: subj.order,
+          );
+        }).toList();
       }
     } catch (e) {
       debugPrint('Error loading course details: $e');
@@ -292,9 +349,193 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     Navigator.push(
       context,
       CupertinoPageRoute(
-        builder: (context) => VideoPlayerScreen(video: video),
+        builder: (context) => VideoPlayerScreen(
+          video: video,
+          playlist: _courseVideos,
+          courseTitle: _course.title,
+          courseId: _course.id,
+          hasPurchased: _hasPurchased,
+        ),
       ),
     ).then((_) => _loadCourseDetails());
+  }
+
+  Video? get _recommendedContinueVideo {
+    final unlocked = _courseVideos.where((v) {
+      return _hasPurchased ||
+          v.canPlay ||
+          v.isPreview == true ||
+          v.isFree == true;
+    }).toList();
+    if (unlocked.isEmpty) return null;
+
+    if (_lastWatchedVideoId != null) {
+      final last = unlocked.where((v) => v.id == _lastWatchedVideoId).toList();
+      if (last.isNotEmpty && !last.first.isWatched && last.first.watchProgress < 90) {
+        return last.first;
+      }
+    }
+
+    final firstIncomplete = unlocked
+        .where((v) => !v.isWatched && v.watchProgress < 90)
+        .toList();
+    if (firstIncomplete.isNotEmpty) return firstIncomplete.first;
+    return unlocked.first;
+  }
+
+  Widget _buildCourseProgressCard() {
+    final total = _courseVideos.length;
+    final completed = _courseVideos
+        .where((v) => v.isWatched || v.watchProgress >= 90)
+        .length;
+    final sumProgress = _courseVideos.fold<int>(
+      0,
+      (acc, v) => acc + (v.isWatched ? 100 : v.watchProgress.clamp(0, 100)),
+    );
+    final pct = total > 0 ? (sumProgress / total).round().clamp(0, 100) : 0;
+    final isAllDone = total > 0 && completed == total;
+    final nextVideo = _recommendedContinueVideo;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: IosTheme.separator, width: 0.6),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text(
+                'YOUR COURSE PROGRESS',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: IosTheme.labelTertiary,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                decoration: BoxDecoration(
+                  color: (isAllDone
+                          ? IosTheme.systemGreen
+                          : IosTheme.primaryBlue)
+                      .withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '$pct%',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: isAllDone
+                        ? IosTheme.systemGreen
+                        : IosTheme.primaryBlue,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(5),
+            child: LinearProgressIndicator(
+              value: pct / 100.0,
+              minHeight: 8,
+              backgroundColor: IosTheme.groupedBg,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                isAllDone ? IosTheme.systemGreen : IosTheme.primaryBlue,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '$completed of $total lecture${total == 1 ? '' : 's'} completed',
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w500,
+              color: IosTheme.labelTertiary,
+            ),
+          ),
+          if (nextVideo != null) ...[
+            const SizedBox(height: 12),
+            const Divider(height: 1, color: IosTheme.separator),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        nextVideo.watchProgress > 0 && !nextVideo.isWatched
+                            ? 'CONTINUE WATCHING'
+                            : 'UP NEXT',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: IosTheme.primaryBlue,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        nextVideo.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: IosTheme.labelPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                CupertinoButton(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  minimumSize: const Size(44, 34),
+                  color: IosTheme.primaryBlue,
+                  borderRadius: BorderRadius.circular(16),
+                  onPressed: () => _openVideo(nextVideo),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        CupertinoIcons.play_fill,
+                        color: Colors.white,
+                        size: 13,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        nextVideo.watchProgress > 0 && !nextVideo.isWatched
+                            ? 'Resume'
+                            : 'Watch',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   @override
@@ -495,6 +736,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                   child: Center(child: CupertinoActivityIndicator(radius: 13)),
                 )
               else ...[
+                if (_courseVideos.isNotEmpty) _buildCourseProgressCard(),
                 // Subjects Section
                 if (_subjects.isNotEmpty) ...[
                   IosSectionLabel('Subjects (${_subjects.length})'),
@@ -547,25 +789,74 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          Text(
-                                            subject.name,
-                                            style: const TextStyle(
-                                              fontSize: 15.5,
-                                              fontWeight: FontWeight.w600,
-                                              color: IosTheme.labelPrimary,
-                                            ),
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  subject.name,
+                                                  style: const TextStyle(
+                                                    fontSize: 15.5,
+                                                    fontWeight: FontWeight.w600,
+                                                    color:
+                                                        IosTheme.labelPrimary,
+                                                  ),
+                                                ),
+                                              ),
+                                              if (subject.progressPercentage >
+                                                  0)
+                                                Text(
+                                                  '${subject.progressPercentage}%',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: subject
+                                                                .progressPercentage >=
+                                                            100
+                                                        ? IosTheme.systemGreen
+                                                        : IosTheme.primaryBlue,
+                                                  ),
+                                                ),
+                                            ],
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
-                                            '${subject.totalVideos} Video Lecture${subject.totalVideos == 1 ? "" : "s"}',
+                                            subject.completedVideos > 0
+                                                ? '${subject.completedVideos}/${subject.totalVideos} lectures completed'
+                                                : '${subject.totalVideos} Video Lecture${subject.totalVideos == 1 ? "" : "s"}',
                                             style: const TextStyle(
                                               fontSize: 12.5,
                                               color: IosTheme.labelTertiary,
                                             ),
                                           ),
+                                          if (subject.progressPercentage >
+                                              0) ...[
+                                            const SizedBox(height: 6),
+                                            ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(2),
+                                              child: LinearProgressIndicator(
+                                                value: (subject
+                                                            .progressPercentage
+                                                            .clamp(0, 100)) /
+                                                    100.0,
+                                                minHeight: 4,
+                                                backgroundColor:
+                                                    IosTheme.groupedBg,
+                                                valueColor:
+                                                    AlwaysStoppedAnimation<
+                                                        Color>(
+                                                  subject.progressPercentage >=
+                                                          100
+                                                      ? IosTheme.systemGreen
+                                                      : IosTheme.primaryBlue,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         ],
                                       ),
                                     ),
+                                    const SizedBox(width: 8),
                                     const Icon(
                                       CupertinoIcons.chevron_right,
                                       size: 15,
@@ -600,6 +891,10 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                           video.canPlay ||
                           video.isPreview == true ||
                           video.isFree == true;
+                      final isCompleted =
+                          video.isWatched || video.watchProgress >= 90;
+                      final prog =
+                          isCompleted ? 100 : video.watchProgress.clamp(0, 100);
 
                       return Column(
                         children: [
@@ -618,19 +913,25 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                                       width: 38,
                                       height: 38,
                                       decoration: BoxDecoration(
-                                        color: (canPlay
-                                                ? IosTheme.primaryBlue
-                                                : IosTheme.labelTertiary)
+                                        color: (isCompleted
+                                                ? IosTheme.systemGreen
+                                                : (canPlay
+                                                    ? IosTheme.primaryBlue
+                                                    : IosTheme.labelTertiary))
                                             .withValues(alpha: 0.12),
                                         borderRadius: BorderRadius.circular(10),
                                       ),
                                       child: Icon(
-                                        canPlay
-                                            ? CupertinoIcons.play_fill
-                                            : CupertinoIcons.lock_fill,
-                                        color: canPlay
-                                            ? IosTheme.primaryBlue
-                                            : IosTheme.labelTertiary,
+                                        isCompleted
+                                            ? CupertinoIcons.checkmark_alt
+                                            : (canPlay
+                                                ? CupertinoIcons.play_fill
+                                                : CupertinoIcons.lock_fill),
+                                        color: isCompleted
+                                            ? IosTheme.systemGreen
+                                            : (canPlay
+                                                ? IosTheme.primaryBlue
+                                                : IosTheme.labelTertiary),
                                         size: 18,
                                       ),
                                     ),
@@ -651,42 +952,73 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                                             ),
                                           ),
                                           const SizedBox(height: 3),
-                                          Row(
+                                          Wrap(
+                                            spacing: 6,
+                                            runSpacing: 2,
+                                            crossAxisAlignment:
+                                                WrapCrossAlignment.center,
                                             children: [
                                               if (video.displayDuration != null)
                                                 Text(
                                                   video.displayDuration!,
                                                   style: const TextStyle(
                                                     fontSize: 12,
-                                                    color: IosTheme.labelTertiary,
+                                                    color:
+                                                        IosTheme.labelTertiary,
                                                   ),
                                                 ),
                                               if (video.isPreview == true ||
-                                                  video.isFree == true) ...[
-                                                if (video.displayDuration !=
-                                                    null)
-                                                  const Text(
-                                                    ' • ',
-                                                    style: TextStyle(
-                                                      fontSize: 12,
-                                                      color:
-                                                          IosTheme.labelTertiary,
-                                                    ),
-                                                  ),
+                                                  video.isFree == true)
                                                 const Text(
-                                                  'Free Preview',
+                                                  '• Free Preview',
                                                   style: TextStyle(
                                                     fontSize: 12,
                                                     fontWeight: FontWeight.w600,
                                                     color: IosTheme.systemGreen,
                                                   ),
                                                 ),
-                                              ],
+                                              if (isCompleted)
+                                                const Text(
+                                                  '• Completed',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: IosTheme.systemGreen,
+                                                  ),
+                                                )
+                                              else if (prog > 0)
+                                                Text(
+                                                  '• $prog% watched',
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: IosTheme.primaryBlue,
+                                                  ),
+                                                ),
                                             ],
                                           ),
+                                          if (prog > 0 && !isCompleted) ...[
+                                            const SizedBox(height: 6),
+                                            ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(2),
+                                              child: LinearProgressIndicator(
+                                                value: prog / 100.0,
+                                                minHeight: 3.5,
+                                                backgroundColor:
+                                                    IosTheme.groupedBg,
+                                                valueColor:
+                                                    const AlwaysStoppedAnimation<
+                                                        Color>(
+                                                  IosTheme.primaryBlue,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         ],
                                       ),
                                     ),
+                                    const SizedBox(width: 8),
                                     const Icon(
                                       CupertinoIcons.chevron_right,
                                       size: 14,

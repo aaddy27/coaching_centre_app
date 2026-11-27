@@ -4,6 +4,7 @@ import '../../models/test_series_models.dart';
 import '../../services/api_service.dart';
 import '../../widgets/ios_components.dart';
 import 'test_instructions_screen.dart';
+import 'test_report_screen.dart';
 
 class SubjectTestsScreen extends StatefulWidget {
   final int testSeriesId;
@@ -26,6 +27,7 @@ class SubjectTestsScreen extends StatefulWidget {
 class _SubjectTestsScreenState extends State<SubjectTestsScreen> {
   bool _isLoading = true;
   List<TestInSeries> _tests = [];
+  Map<int, int> _attemptedTests = {};
   String? _error;
 
   @override
@@ -41,17 +43,24 @@ class _SubjectTestsScreenState extends State<SubjectTestsScreen> {
     });
 
     try {
-      final response = await ApiService.getSubjectTests(
-        testSeriesId: widget.testSeriesId,
-        subjectId: widget.subjectId,
-      );
+      final results = await Future.wait([
+        ApiService.getSubjectTests(
+          testSeriesId: widget.testSeriesId,
+          subjectId: widget.subjectId,
+        ),
+        ApiService.getAttemptedTestsMap(),
+      ]);
 
       if (!mounted) return;
+
+      final response = results[0] as Map<String, dynamic>;
+      final attemptedMap = results[1] as Map<int, int>;
 
       if (response['success'] == true && response['data'] != null) {
         final List<dynamic> list = response['data']['tests'] ?? [];
         setState(() {
           _tests = list.map((e) => TestInSeries.fromJson(e)).toList();
+          _attemptedTests = attemptedMap;
           _isLoading = false;
         });
       } else {
@@ -105,6 +114,10 @@ class _SubjectTestsScreenState extends State<SubjectTestsScreen> {
   }
 
   Widget _buildTestCard(TestInSeries test) {
+    final attemptId = _attemptedTests[test.id] ?? test.attemptId ?? 0;
+    final isAttempted =
+        test.hasAttempted || _attemptedTests.containsKey(test.id);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(16),
@@ -147,6 +160,38 @@ class _SubjectTestsScreenState extends State<SubjectTestsScreen> {
                   ),
                 ),
               ),
+              if (isAttempted) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: IosTheme.systemGreen.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        CupertinoIcons.checkmark_alt_circle_fill,
+                        color: IosTheme.systemGreen,
+                        size: 13,
+                      ),
+                      SizedBox(width: 4),
+                      Text(
+                        'Attempted',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: IosTheme.systemGreen,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 14),
@@ -173,21 +218,46 @@ class _SubjectTestsScreenState extends State<SubjectTestsScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          IosPrimaryButton(
-            label: 'Start Test',
-            onPressed: () {
-              Navigator.push(
-                context,
-                CupertinoPageRoute(
-                  builder: (context) => TestInstructionsScreen(
-                    testId: test.id,
-                    testTitle: test.title,
-                    fallbackTest: test,
+          if (isAttempted)
+            IosPrimaryButton(
+              label: attemptId > 0 ? 'View Scorecard' : 'Already Attempted',
+              color: attemptId > 0
+                  ? IosTheme.systemGreen
+                  : IosTheme.labelTertiary,
+              icon: attemptId > 0
+                  ? CupertinoIcons.doc_chart_fill
+                  : CupertinoIcons.lock_fill,
+              onPressed: attemptId > 0
+                  ? () {
+                      Navigator.push(
+                        context,
+                        CupertinoPageRoute(
+                          builder: (context) => TestReportScreen(
+                            attemptId: attemptId,
+                            testTitle: test.title,
+                          ),
+                        ),
+                      );
+                    }
+                  : null,
+            )
+          else
+            IosPrimaryButton(
+              label: 'Start Test',
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  CupertinoPageRoute(
+                    builder: (context) => TestInstructionsScreen(
+                      testId: test.id,
+                      testTitle: test.title,
+                      fallbackTest: test,
+                    ),
                   ),
-                ),
-              );
-            },
-          ),
+                );
+                if (mounted) _fetchTests();
+              },
+            ),
         ],
       ),
     );

@@ -44,6 +44,271 @@ class ApiService {
 
   static Future<void> deleteToken() async {
     await storage.delete(key: 'auth_token');
+    await storage.delete(key: _attemptedTestsStorageKey);
+    await storage.delete(key: _videoProgressStorageKey);
+    await storage.delete(key: _courseProgressStorageKey);
+    await storage.delete(key: _courseLastVideoStorageKey);
+    await storage.delete(key: _lastWatchedVideoStorageKey);
+  }
+
+  static const String _videoProgressStorageKey = 'video_progress_v1';
+  static const String _courseProgressStorageKey = 'course_progress_v1';
+  static const String _courseLastVideoStorageKey = 'course_last_video_v1';
+  static const String _lastWatchedVideoStorageKey = 'last_watched_video_v1';
+
+  static Future<Map<int, Map<String, dynamic>>> getLocalVideoProgressMap() async {
+    try {
+      final raw = await storage.read(key: _videoProgressStorageKey);
+      if (raw == null || raw.isEmpty) return {};
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return {};
+      final result = <int, Map<String, dynamic>>{};
+      decoded.forEach((k, v) {
+        final id = int.tryParse(k.toString());
+        if (id != null && id > 0 && v is Map) {
+          result[id] = Map<String, dynamic>.from(v);
+        }
+      });
+      return result;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static Future<void> saveLocalVideoProgress({
+    required int videoId,
+    required int progress,
+    required int watchedSeconds,
+    bool? completed,
+    int? courseId,
+    String? courseTitle,
+    Map<String, dynamic>? videoJson,
+    bool syncRemote = true,
+  }) async {
+    if (videoId <= 0) return;
+    final clampedProgress = progress.clamp(0, 100);
+    final map = await getLocalVideoProgressMap();
+    final existing = map[videoId];
+    final bool wasCompleted = existing?['completed'] == true;
+    final int prevProgress =
+        existing?['progress'] is int ? existing!['progress'] as int : 0;
+    final bool isCompleted =
+        completed ?? (wasCompleted || clampedProgress >= 90);
+    final int finalProgress = isCompleted
+        ? 100
+        : (clampedProgress > prevProgress ? clampedProgress : prevProgress);
+
+    final nowIso = DateTime.now().toIso8601String();
+    map[videoId] = {
+      'progress': finalProgress,
+      'watched_seconds': watchedSeconds,
+      'completed': isCompleted,
+      'updated_at': nowIso,
+    };
+
+    await storage.write(
+      key: _videoProgressStorageKey,
+      value: jsonEncode(map.map((k, v) => MapEntry(k.toString(), v))),
+    );
+
+    if (videoJson != null) {
+      await storage.write(
+        key: _lastWatchedVideoStorageKey,
+        value: jsonEncode({
+          'video': {
+            ...videoJson,
+            'watch_progress': finalProgress,
+            'watched_seconds': watchedSeconds,
+            'is_watched': isCompleted,
+          },
+          'course_id': courseId,
+          'course_title': courseTitle,
+          'watched_seconds': watchedSeconds,
+          'progress': finalProgress,
+          'completed': isCompleted,
+          'updated_at': nowIso,
+        }),
+      );
+    }
+
+    if (courseId != null && courseId > 0) {
+      await saveCourseLastVideoId(courseId, videoId);
+    }
+
+    if (syncRemote && await isLoggedIn()) {
+      updateVideoProgress(
+        videoId: videoId,
+        progress: finalProgress,
+        watchedSeconds: watchedSeconds,
+      ).catchError((_) => <String, dynamic>{'success': false});
+    }
+  }
+
+  static Future<Map<String, dynamic>?> getLastWatchedVideo() async {
+    try {
+      final raw = await storage.read(key: _lastWatchedVideoStorageKey);
+      if (raw == null || raw.isEmpty) return null;
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic> && decoded['video'] is Map) {
+        return decoded;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  static Future<void> dismissLastWatchedVideo() async {
+    try {
+      await storage.delete(key: _lastWatchedVideoStorageKey);
+    } catch (_) {}
+  }
+
+  static Future<void> saveCourseLastVideoId(int courseId, int videoId) async {
+    if (courseId <= 0 || videoId <= 0) return;
+    try {
+      final raw = await storage.read(key: _courseLastVideoStorageKey);
+      final Map<String, dynamic> data =
+          (raw != null && raw.isNotEmpty) ? jsonDecode(raw) : {};
+      data[courseId.toString()] = videoId;
+      await storage.write(
+        key: _courseLastVideoStorageKey,
+        value: jsonEncode(data),
+      );
+    } catch (_) {}
+  }
+
+  static Future<int?> getCourseLastVideoId(int courseId) async {
+    if (courseId <= 0) return null;
+    try {
+      final raw = await storage.read(key: _courseLastVideoStorageKey);
+      if (raw == null || raw.isEmpty) return null;
+      final data = jsonDecode(raw);
+      if (data is Map) {
+        final v = data[courseId.toString()];
+        return v is int ? v : int.tryParse('${v ?? ''}');
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  static Future<void> saveCourseProgressSummary({
+    required int courseId,
+    required int completedVideos,
+    required int totalVideos,
+  }) async {
+    if (courseId <= 0 || totalVideos <= 0) return;
+    try {
+      final raw = await storage.read(key: _courseProgressStorageKey);
+      final Map<String, dynamic> data =
+          (raw != null && raw.isNotEmpty) ? jsonDecode(raw) : {};
+      final pct = ((completedVideos / totalVideos) * 100).round().clamp(0, 100);
+      data[courseId.toString()] = {
+        'progress': pct,
+        'completed_videos': completedVideos,
+        'total_videos': totalVideos,
+      };
+      await storage.write(
+        key: _courseProgressStorageKey,
+        value: jsonEncode(data),
+      );
+    } catch (_) {}
+  }
+
+  static Future<Map<int, Map<String, int>>> getCourseProgressSummaryMap() async {
+    try {
+      final raw = await storage.read(key: _courseProgressStorageKey);
+      if (raw == null || raw.isEmpty) return {};
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return {};
+      final out = <int, Map<String, int>>{};
+      decoded.forEach((k, v) {
+        final cid = int.tryParse(k.toString());
+        if (cid != null && v is Map) {
+          out[cid] = {
+            'progress': int.tryParse('${v['progress'] ?? 0}') ?? 0,
+            'completed_videos':
+                int.tryParse('${v['completed_videos'] ?? 0}') ?? 0,
+            'total_videos': int.tryParse('${v['total_videos'] ?? 0}') ?? 0,
+          };
+        }
+      });
+      return out;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static const String _attemptedTestsStorageKey = 'attempted_tests_v1';
+
+  static Future<Map<int, int>> getLocalAttemptedTests() async {
+    try {
+      final raw = await storage.read(key: _attemptedTestsStorageKey);
+      if (raw == null || raw.isEmpty) return {};
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return {};
+      final result = <int, int>{};
+      decoded.forEach((k, v) {
+        final testId = int.tryParse(k.toString());
+        final attemptId = int.tryParse(v.toString()) ?? 0;
+        if (testId != null && testId > 0) {
+          result[testId] = attemptId;
+        }
+      });
+      return result;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static Future<void> markTestAttempted(int testId, {int? attemptId}) async {
+    if (testId <= 0) return;
+    final current = await getLocalAttemptedTests();
+    final existingAttemptId = current[testId] ?? 0;
+    current[testId] = (attemptId != null && attemptId > 0)
+        ? attemptId
+        : existingAttemptId;
+    final encoded = jsonEncode(
+      current.map((k, v) => MapEntry(k.toString(), v)),
+    );
+    await storage.write(key: _attemptedTestsStorageKey, value: encoded);
+  }
+
+  /// Combines server `/my-attempts` and local lock so each test can only be taken once.
+  static Future<Map<int, int>> getAttemptedTestsMap() async {
+    final map = await getLocalAttemptedTests();
+    if (!await isLoggedIn()) return map;
+
+    try {
+      final res = await getMyAttempts();
+      if (res['success'] == true && res['data'] != null) {
+        final raw = res['data'];
+        final List list = raw is List
+            ? raw
+            : (raw is Map && raw['data'] is List
+                ? raw['data']
+                : (raw is Map && raw['attempts'] is List
+                    ? raw['attempts']
+                    : []));
+        for (final item in list) {
+          if (item is! Map) continue;
+          final testIdRaw = item['test_id'] ??
+              (item['test'] is Map ? item['test']['id'] : null);
+          final attemptIdRaw = item['attempt_id'] ?? item['id'];
+          final testId = testIdRaw is int
+              ? testIdRaw
+              : int.tryParse('${testIdRaw ?? ''}');
+          final attemptId = attemptIdRaw is int
+              ? attemptIdRaw
+              : int.tryParse('${attemptIdRaw ?? 0}') ?? 0;
+          if (testId != null && testId > 0) {
+            final existing = map[testId] ?? 0;
+            map[testId] = attemptId > 0 ? attemptId : existing;
+          }
+        }
+      }
+    } catch (_) {
+      // Keep local lock if network fails
+    }
+    return map;
   }
 
   static Future<bool> isLoggedIn() async {

@@ -67,6 +67,42 @@ class Course {
     return null;
   }
 
+  Course copyWithProgress({
+    int? progress,
+    int? completedVideos,
+    int? totalVideos,
+  }) {
+    return Course(
+      id: id,
+      examBoardId: examBoardId,
+      title: title,
+      slug: slug,
+      description: description,
+      shortDescription: shortDescription,
+      price: price,
+      currency: currency,
+      duration: duration,
+      level: level,
+      language: language,
+      thumbnail: thumbnail,
+      thumbnailPath: thumbnailPath,
+      previewVideo: previewVideo,
+      isPublished: isPublished,
+      isPurchased: isPurchased,
+      totalVideos: totalVideos ?? this.totalVideos,
+      totalTests: totalTests,
+      enrolledStudents: enrolledStudents,
+      totalSubjects: totalSubjects,
+      totalDuration: totalDuration,
+      progress: progress ?? this.progress,
+      completedVideos: completedVideos ?? this.completedVideos,
+      enrolledAt: enrolledAt,
+      createdAt: createdAt,
+      examBoard: examBoard,
+      subjects: subjects,
+    );
+  }
+
   factory Course.fromJson(Map<String, dynamic> json) {
     try {
       return Course(

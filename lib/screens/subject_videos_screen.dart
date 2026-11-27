@@ -25,7 +25,7 @@ class SubjectVideosScreen extends StatefulWidget {
 }
 
 class _SubjectVideosScreenState extends State<SubjectVideosScreen> {
-  List<Video> _videos = [];
+  List<Video> _allVideos = [];
   bool _isLoading = true;
   bool _hasPurchased = false;
   String? _errorMessage;
@@ -46,23 +46,47 @@ class _SubjectVideosScreenState extends State<SubjectVideosScreen> {
     });
 
     try {
-      final response = await ApiService.getSubjectVideos(
-        courseId: widget.courseId,
-        subjectId: widget.subject.id,
-        filter: _selectedFilter,
-        sort: _selectedSort,
-      );
+      final results = await Future.wait([
+        ApiService.getSubjectVideos(
+          courseId: widget.courseId,
+          subjectId: widget.subject.id,
+          sort: _selectedSort,
+        ),
+        ApiService.getLocalVideoProgressMap(),
+      ]);
 
       if (!mounted) return;
+
+      final response = results[0] as Map<String, dynamic>;
+      final localProgMap = results[1] as Map<int, Map<String, dynamic>>;
 
       if (response['success'] == true && response['data'] != null) {
         final data = response['data'] as Map<String, dynamic>;
         final List<dynamic> videosData = data['videos'] ?? [];
+
+        final merged = videosData.map((json) {
+          final parsed = Video.fromJson(json);
+          final local = localProgMap[parsed.id];
+          if (local == null) return parsed;
+          final lp = local['progress'] is int ? local['progress'] as int : 0;
+          final ls = local['watched_seconds'] is int
+              ? local['watched_seconds'] as int
+              : 0;
+          final lc = local['completed'] == true;
+          return parsed.copyWithProgress(
+            watchProgress:
+                lp > parsed.watchProgress ? lp : parsed.watchProgress,
+            watchedSeconds:
+                ls > parsed.watchedSeconds ? ls : parsed.watchedSeconds,
+            isWatched: parsed.isWatched || lc || lp >= 90,
+          );
+        }).toList();
+
         setState(() {
           _hasPurchased = (data['has_purchased'] == true) ||
               widget.isEnrolled ||
               widget.coursePrice <= 0;
-          _videos = videosData.map((json) => Video.fromJson(json)).toList();
+          _allVideos = merged;
           _isLoading = false;
         });
       } else {
@@ -83,6 +107,44 @@ class _SubjectVideosScreenState extends State<SubjectVideosScreen> {
     }
   }
 
+  List<Video> get _filteredVideos {
+    if (_selectedFilter == 'watched') {
+      return _allVideos
+          .where((v) => v.isWatched || v.watchProgress >= 90)
+          .toList();
+    } else if (_selectedFilter == 'unwatched') {
+      return _allVideos
+          .where((v) => !v.isWatched && v.watchProgress < 90)
+          .toList();
+    }
+    return _allVideos;
+  }
+
+  void _openVideo(Video video) {
+    final canPlay = _hasPurchased ||
+        video.canPlay ||
+        video.isPreview == true ||
+        video.isFree == true;
+
+    if (!canPlay) {
+      _showLockedDialog();
+      return;
+    }
+
+    Navigator.push(
+      context,
+      CupertinoPageRoute(
+        builder: (context) => VideoPlayerScreen(
+          video: video,
+          playlist: _allVideos,
+          courseTitle: widget.subject.name,
+          courseId: widget.courseId,
+          hasPurchased: _hasPurchased,
+        ),
+      ),
+    ).then((_) => _loadVideos());
+  }
+
   void _showFilterOptions() {
     showCupertinoModalPopup<void>(
       context: context,
@@ -93,7 +155,6 @@ class _SubjectVideosScreenState extends State<SubjectVideosScreen> {
             onPressed: () {
               Navigator.pop(sheetCtx);
               setState(() => _selectedFilter = null);
-              _loadVideos();
             },
             child: Text(
               _selectedFilter == null ? '✓ All Videos' : 'All Videos',
@@ -103,7 +164,6 @@ class _SubjectVideosScreenState extends State<SubjectVideosScreen> {
             onPressed: () {
               Navigator.pop(sheetCtx);
               setState(() => _selectedFilter = 'unwatched');
-              _loadVideos();
             },
             child: Text(
               _selectedFilter == 'unwatched' ? '✓ Unwatched' : 'Unwatched',
@@ -113,7 +173,6 @@ class _SubjectVideosScreenState extends State<SubjectVideosScreen> {
             onPressed: () {
               Navigator.pop(sheetCtx);
               setState(() => _selectedFilter = 'watched');
-              _loadVideos();
             },
             child: Text(
               _selectedFilter == 'watched' ? '✓ Watched' : 'Watched',
@@ -122,7 +181,10 @@ class _SubjectVideosScreenState extends State<SubjectVideosScreen> {
           CupertinoActionSheetAction(
             onPressed: () {
               Navigator.pop(sheetCtx);
-              setState(() => _selectedSort = 'duration');
+              setState(() {
+                _selectedSort =
+                    _selectedSort == 'duration' ? null : 'duration';
+              });
               _loadVideos();
             },
             child: Text(
@@ -158,7 +220,7 @@ class _SubjectVideosScreenState extends State<SubjectVideosScreen> {
             isDefaultAction: true,
             onPressed: () {
               Navigator.pop(dialogContext);
-              Navigator.pop(context); // Return to CourseDetailScreen to enroll
+              Navigator.pop(context);
             },
             child: const Text('Go to Enroll'),
           ),
@@ -169,11 +231,13 @@ class _SubjectVideosScreenState extends State<SubjectVideosScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final videos = _filteredVideos;
+
     return Scaffold(
       backgroundColor: IosTheme.groupedBg,
       appBar: IosNavBar(
         title: widget.subject.name,
-        subtitle: '${_videos.length} Videos',
+        subtitle: '${_allVideos.length} Videos',
         trailing: CupertinoButton(
           padding: EdgeInsets.zero,
           minimumSize: const Size(36, 36),
@@ -189,32 +253,168 @@ class _SubjectVideosScreenState extends State<SubjectVideosScreen> {
           ? const Center(child: CupertinoActivityIndicator(radius: 14))
           : _errorMessage != null
               ? _buildError()
-              : _videos.isEmpty
+              : _allVideos.isEmpty
                   ? _buildEmpty()
                   : RefreshIndicator(
                       onRefresh: _loadVideos,
                       color: IosTheme.primaryBlue,
-                      child: ListView.builder(
+                      child: ListView(
                         physics: const BouncingScrollPhysics(
                           parent: AlwaysScrollableScrollPhysics(),
                         ),
                         padding: const EdgeInsets.all(16),
-                        itemCount: _videos.length,
-                        itemBuilder: (context, index) {
-                          final video = _videos[index];
-                          final canPlay = _hasPurchased ||
-                              video.canPlay ||
-                              video.isPreview == true ||
-                              video.isFree == true;
-
-                          return _buildVideoCard(video, index, canPlay);
-                        },
+                        children: [
+                          _buildSubjectProgressCard(),
+                          if (videos.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 40),
+                              child: Center(
+                                child: Text(
+                                  'No lectures match the selected filter.',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: IosTheme.labelTertiary,
+                                  ),
+                                ),
+                              ),
+                            )
+                          else
+                            ...List.generate(videos.length, (index) {
+                              final video = videos[index];
+                              final canPlay = _hasPurchased ||
+                                  video.canPlay ||
+                                  video.isPreview == true ||
+                                  video.isFree == true;
+                              return _buildVideoCard(video, index, canPlay);
+                            }),
+                        ],
                       ),
                     ),
     );
   }
 
+  Widget _buildSubjectProgressCard() {
+    final total = _allVideos.length;
+    final completed = _allVideos
+        .where((v) => v.isWatched || v.watchProgress >= 90)
+        .length;
+    final sumProgress = _allVideos.fold<int>(
+      0,
+      (acc, v) => acc + (v.isWatched ? 100 : v.watchProgress.clamp(0, 100)),
+    );
+    final pct = total > 0 ? (sumProgress / total).round().clamp(0, 100) : 0;
+    final isAllDone = total > 0 && completed == total;
+
+    final nextCandidates = _allVideos.where((v) {
+      final canPlay = _hasPurchased ||
+          v.canPlay ||
+          v.isPreview == true ||
+          v.isFree == true;
+      return canPlay && !v.isWatched && v.watchProgress < 90;
+    }).toList();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: IosTheme.separator, width: 0.6),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text(
+                'SUBJECT PROGRESS',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: IosTheme.labelTertiary,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: (isAllDone
+                          ? IosTheme.systemGreen
+                          : IosTheme.primaryBlue)
+                      .withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '$pct%',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: isAllDone
+                        ? IosTheme.systemGreen
+                        : IosTheme.primaryBlue,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(5),
+            child: LinearProgressIndicator(
+              value: pct / 100.0,
+              minHeight: 7,
+              backgroundColor: IosTheme.groupedBg,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                isAllDone ? IosTheme.systemGreen : IosTheme.primaryBlue,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '$completed of $total lectures completed',
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                    color: IosTheme.labelTertiary,
+                  ),
+                ),
+              ),
+              if (nextCandidates.isNotEmpty)
+                CupertinoButton(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 5,
+                  ),
+                  minimumSize: const Size(44, 30),
+                  color: IosTheme.primaryBlue,
+                  borderRadius: BorderRadius.circular(14),
+                  onPressed: () => _openVideo(nextCandidates.first),
+                  child: Text(
+                    nextCandidates.first.watchProgress > 0
+                        ? 'Resume'
+                        : 'Start Next',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildVideoCard(Video video, int index, bool canPlay) {
+    final isCompleted = video.isWatched || video.watchProgress >= 90;
+    final prog = isCompleted ? 100 : video.watchProgress.clamp(0, 100);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -226,18 +426,7 @@ class _SubjectVideosScreenState extends State<SubjectVideosScreen> {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
-          onTap: () {
-            if (!canPlay) {
-              _showLockedDialog();
-              return;
-            }
-            Navigator.push(
-              context,
-              CupertinoPageRoute(
-                builder: (context) => VideoPlayerScreen(video: video),
-              ),
-            ).then((_) => _loadVideos());
-          },
+          onTap: () => _openVideo(video),
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
@@ -247,34 +436,62 @@ class _SubjectVideosScreenState extends State<SubjectVideosScreen> {
                   children: [
                     ClipRRect(
                       borderRadius: BorderRadius.circular(10),
-                      child: Container(
-                        width: 108,
-                        height: 66,
-                        color: IosTheme.groupedBg,
-                        child: video.thumbnail != null &&
-                                video.thumbnail!.isNotEmpty
-                            ? Image.network(
-                                video.thumbnail!,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) =>
-                                    _buildThumbIcon(canPlay),
-                              )
-                            : _buildThumbIcon(canPlay),
+                      child: SizedBox(
+                        width: 112,
+                        height: 68,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Container(
+                              color: IosTheme.groupedBg,
+                              child: video.thumbnail != null &&
+                                      video.thumbnail!.isNotEmpty
+                                  ? Image.network(
+                                      video.thumbnail!,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) =>
+                                          _buildThumbIcon(canPlay),
+                                    )
+                                  : _buildThumbIcon(canPlay),
+                            ),
+                            if (prog > 0)
+                              Positioned(
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                child: LinearProgressIndicator(
+                                  value: prog / 100.0,
+                                  minHeight: 3.5,
+                                  backgroundColor:
+                                      Colors.black.withValues(alpha: 0.3),
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    isCompleted
+                                        ? IosTheme.systemGreen
+                                        : IosTheme.primaryBlue,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                     Container(
                       width: 34,
                       height: 34,
                       decoration: BoxDecoration(
-                        color: canPlay
-                            ? IosTheme.primaryBlue.withValues(alpha: 0.9)
-                            : Colors.black.withValues(alpha: 0.65),
+                        color: isCompleted
+                            ? IosTheme.systemGreen.withValues(alpha: 0.92)
+                            : (canPlay
+                                ? IosTheme.primaryBlue.withValues(alpha: 0.9)
+                                : Colors.black.withValues(alpha: 0.65)),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
-                        canPlay
-                            ? CupertinoIcons.play_fill
-                            : CupertinoIcons.lock_fill,
+                        isCompleted
+                            ? CupertinoIcons.checkmark_alt
+                            : (canPlay
+                                ? CupertinoIcons.play_fill
+                                : CupertinoIcons.lock_fill),
                         color: Colors.white,
                         size: 16,
                       ),
@@ -286,7 +503,10 @@ class _SubjectVideosScreenState extends State<SubjectVideosScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Text(
                             'Lecture ${video.order > 0 ? video.order : index + 1}',
@@ -296,17 +516,15 @@ class _SubjectVideosScreenState extends State<SubjectVideosScreen> {
                               color: IosTheme.primaryBlue,
                             ),
                           ),
-                          if (video.isPreview == true ||
-                              video.isFree == true) ...[
-                            const SizedBox(width: 6),
+                          if (video.isPreview == true || video.isFree == true)
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 6,
                                 vertical: 1.5,
                               ),
                               decoration: BoxDecoration(
-                                color:
-                                    IosTheme.systemGreen.withValues(alpha: 0.12),
+                                color: IosTheme.systemGreen
+                                    .withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(5),
                               ),
                               child: const Text(
@@ -318,7 +536,35 @@ class _SubjectVideosScreenState extends State<SubjectVideosScreen> {
                                 ),
                               ),
                             ),
-                          ],
+                          if (isCompleted)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 1.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: IosTheme.systemGreen
+                                    .withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                              child: const Text(
+                                'COMPLETED',
+                                style: TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: IosTheme.systemGreen,
+                                ),
+                              ),
+                            )
+                          else if (prog > 0)
+                            Text(
+                              '$prog%',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: IosTheme.primaryBlue,
+                              ),
+                            ),
                         ],
                       ),
                       const SizedBox(height: 3),
