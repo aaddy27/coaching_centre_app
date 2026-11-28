@@ -8,6 +8,7 @@ import 'models/course.dart';
 import 'models/test_series_models.dart';
 import 'models/video.dart';
 import 'registration/login_screen.dart';
+import 'screens/company_info_screen.dart';
 import 'screens/course_detail_screen.dart';
 import 'screens/courses_screen.dart';
 import 'screens/my_courses_screen.dart';
@@ -155,11 +156,7 @@ class HomeContent extends StatefulWidget {
   final Function(int)? onNavigateTab;
   final ValueListenable<int>? refreshNotifier;
 
-  const HomeContent({
-    super.key,
-    this.onNavigateTab,
-    this.refreshNotifier,
-  });
+  const HomeContent({super.key, this.onNavigateTab, this.refreshNotifier});
 
   @override
   State<HomeContent> createState() => _HomeContentState();
@@ -226,12 +223,14 @@ class _HomeContentState extends State<HomeContent> {
     }
 
     // 0. Load last watched video for floating Continue Watching popup
-    ApiService.getLastWatchedVideo().then((lastWatched) {
-      if (!mounted) return;
-      setState(() {
-        _lastWatchedData = lastWatched;
-      });
-    }).catchError((_) {});
+    ApiService.getLastWatchedVideo()
+        .then((lastWatched) {
+          if (!mounted) return;
+          setState(() {
+            _lastWatchedData = lastWatched;
+          });
+        })
+        .catchError((_) {});
 
     // 1. Auth & student-specific data
     try {
@@ -248,86 +247,96 @@ class _HomeContentState extends State<HomeContent> {
       }
 
       if (loggedIn) {
-        ApiService.getProfile().then((profileRes) {
-          if (!mounted) return;
-          if (profileRes['success'] == true && profileRes['data'] != null) {
-            final user = profileRes['data']['user'] ?? profileRes['data'];
-            if (user is Map && user['name'] != null) {
-              setState(() {
-                _userName = user['name'].toString();
-              });
-            }
-          }
-        }).catchError((e) {
-          debugPrint('Error loading home profile: $e');
-        });
-
-        ApiService.getMyCourses().then((myCoursesRes) async {
-          if (!mounted) return;
-          if (myCoursesRes['success'] == true && myCoursesRes['data'] != null) {
-            final raw = myCoursesRes['data'];
-            final List<dynamic> coursesData = raw is List
-                ? raw
-                : (raw is Map && raw['courses'] is List ? raw['courses'] : []);
-            try {
-              final localSummary =
-                  await ApiService.getCourseProgressSummaryMap();
-              final myCourses = coursesData.map((json) {
-                final c = Course.fromJson(json);
-                final local = localSummary[c.id];
-                if (local == null) return c;
-                final lp = local['progress'] ?? 0;
-                final serverProg = c.progress ?? 0;
-                return c.copyWithProgress(
-                  progress: lp > serverProg ? lp : c.progress,
-                  completedVideos: local['completed_videos'],
-                  totalVideos: local['total_videos'],
-                );
-              }).toList();
-              if (mounted) {
-                setState(() {
-                  _inProgressCourse =
-                      myCourses.isNotEmpty ? myCourses.first : null;
-                  _myCoursesCount = myCourses.length;
-                });
+        ApiService.getProfile()
+            .then((profileRes) {
+              if (!mounted) return;
+              if (profileRes['success'] == true && profileRes['data'] != null) {
+                final user = profileRes['data']['user'] ?? profileRes['data'];
+                if (user is Map && user['name'] != null) {
+                  setState(() {
+                    _userName = user['name'].toString();
+                  });
+                }
               }
-            } catch (e) {
-              debugPrint('Error parsing my courses: $e');
-            }
-          }
-        }).catchError((e) {
-          debugPrint('Error loading my courses: $e');
-        });
+            })
+            .catchError((e) {
+              debugPrint('Error loading home profile: $e');
+            });
+
+        ApiService.getMyCourses()
+            .then((myCoursesRes) async {
+              if (!mounted) return;
+              if (myCoursesRes['success'] == true &&
+                  myCoursesRes['data'] != null) {
+                final raw = myCoursesRes['data'];
+                final List<dynamic> coursesData = raw is List
+                    ? raw
+                    : (raw is Map && raw['courses'] is List
+                          ? raw['courses']
+                          : []);
+                try {
+                  final localSummary =
+                      await ApiService.getCourseProgressSummaryMap();
+                  final myCourses = coursesData.map((json) {
+                    final c = Course.fromJson(json);
+                    final local = localSummary[c.id];
+                    if (local == null) return c;
+                    final lp = local['progress'] ?? 0;
+                    final serverProg = c.progress ?? 0;
+                    return c.copyWithProgress(
+                      progress: lp > serverProg ? lp : c.progress,
+                      completedVideos: local['completed_videos'],
+                      totalVideos: local['total_videos'],
+                    );
+                  }).toList();
+                  if (mounted) {
+                    setState(() {
+                      _inProgressCourse = myCourses.isNotEmpty
+                          ? myCourses.first
+                          : null;
+                      _myCoursesCount = myCourses.length;
+                    });
+                  }
+                } catch (e) {
+                  debugPrint('Error parsing my courses: $e');
+                }
+              }
+            })
+            .catchError((e) {
+              debugPrint('Error loading my courses: $e');
+            });
       }
     } catch (e) {
       debugPrint('Error checking auth in home: $e');
     }
 
     // 2. Featured Test Series from GET /test-series
-    ApiService.getTestSeriesList().then((res) {
-      if (!mounted) return;
-      if (res['success'] == true && res['data'] != null) {
-        final raw = res['data'];
-        final List<dynamic> list = raw is List
-            ? raw
-            : (raw is Map && raw['data'] is List
-                ? raw['data']
-                : (raw is Map && raw['test_series'] is List
-                    ? raw['test_series']
-                    : []));
-        if (list.isNotEmpty) {
-          try {
-            setState(() {
-              _featuredTestSeries = TestSeries.fromJson(list.first);
-            });
-          } catch (e) {
-            debugPrint('Error parsing featured test series: $e');
+    ApiService.getTestSeriesList()
+        .then((res) {
+          if (!mounted) return;
+          if (res['success'] == true && res['data'] != null) {
+            final raw = res['data'];
+            final List<dynamic> list = raw is List
+                ? raw
+                : (raw is Map && raw['data'] is List
+                      ? raw['data']
+                      : (raw is Map && raw['test_series'] is List
+                            ? raw['test_series']
+                            : []));
+            if (list.isNotEmpty) {
+              try {
+                setState(() {
+                  _featuredTestSeries = TestSeries.fromJson(list.first);
+                });
+              } catch (e) {
+                debugPrint('Error parsing featured test series: $e');
+              }
+            }
           }
-        }
-      }
-    }).catchError((e) {
-      debugPrint('Error loading test series for home: $e');
-    });
+        })
+        .catchError((e) {
+          debugPrint('Error loading test series for home: $e');
+        });
 
     // 3. Courses Catalog from GET /courses
     try {
@@ -348,8 +357,9 @@ class _HomeContentState extends State<HomeContent> {
           coursesData = response['courses'];
         }
 
-        final parsedCourses =
-            coursesData.map((json) => Course.fromJson(json)).toList();
+        final parsedCourses = coursesData
+            .map((json) => Course.fromJson(json))
+            .toList();
         setState(() {
           _courses = parsedCourses;
           _isLoadingCourses = false;
@@ -395,10 +405,7 @@ class _HomeContentState extends State<HomeContent> {
       _loadAllHomeData(showSpinner: false);
     }
     if (!mounted) return;
-    Navigator.push(
-      context,
-      CupertinoPageRoute(builder: (_) => screen),
-    );
+    Navigator.push(context, CupertinoPageRoute(builder: (_) => screen));
   }
 
   IconData _getCourseIcon(Course course) {
@@ -416,8 +423,7 @@ class _HomeContentState extends State<HomeContent> {
         lowerTitle.contains('life') ||
         lowerTitle.contains('botany')) {
       return CupertinoIcons.leaf_arrow_circlepath;
-    } else if (lowerTitle.contains('computer') ||
-        lowerTitle.contains('it')) {
+    } else if (lowerTitle.contains('computer') || lowerTitle.contains('it')) {
       return CupertinoIcons.device_laptop;
     }
     return CupertinoIcons.book_fill;
@@ -477,6 +483,8 @@ class _HomeContentState extends State<HomeContent> {
                 _buildFeaturedTestSeriesCard(),
                 const SizedBox(height: 24),
                 _buildCoursesSection(),
+                const SizedBox(height: 22),
+                _buildCompanyPromoCard(),
                 SizedBox(height: hasLastWatched ? 116 : 36),
               ],
             ),
@@ -511,11 +519,15 @@ class _HomeContentState extends State<HomeContent> {
     final watchedSecs =
         int.tryParse('${data['watched_seconds'] ?? video.watchedSeconds}') ?? 0;
     final progress =
-        (int.tryParse('${data['progress'] ?? video.watchProgress}') ?? 0)
-            .clamp(0, 100);
+        (int.tryParse('${data['progress'] ?? video.watchProgress}') ?? 0).clamp(
+          0,
+          100,
+        );
     final completed =
         data['completed'] == true || video.isWatched || progress >= 95;
-    final courseId = int.tryParse('${data['course_id'] ?? video.courseId ?? ''}');
+    final courseId = int.tryParse(
+      '${data['course_id'] ?? video.courseId ?? ''}',
+    );
     final courseTitle = data['course_title']?.toString();
 
     final statusText = completed
@@ -681,6 +693,108 @@ class _HomeContentState extends State<HomeContent> {
     );
   }
 
+  Widget _buildCompanyPromoCard() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const IosSectionLabel('Technology Partner'),
+          IosGroupedCard(
+            children: [
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    Navigator.push(
+                      context,
+                      CupertinoPageRoute(
+                        builder: (_) => const CompanyInfoScreen(),
+                      ),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: IosTheme.primaryBlue,
+                            borderRadius: BorderRadius.circular(11),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'CIS',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                CompanyInfoScreen.companyName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: IosTheme.labelPrimary,
+                                ),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                '${CompanyInfoScreen.ownerName} • ${CompanyInfoScreen.mobileNumber}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: IosTheme.labelTertiary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              SizedBox(height: 1),
+                              Text(
+                                CompanyInfoScreen.officeAddress,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: IosTheme.labelTertiary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Icon(
+                          CupertinoIcons.chevron_right,
+                          size: 14,
+                          color: Color(0xFFC7C7CC),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildGreetingHeader() {
     final displayName = _userName != null && _userName!.trim().isNotEmpty
         ? _userName!.trim()
@@ -777,8 +891,9 @@ class _HomeContentState extends State<HomeContent> {
   Widget _buildContinueLearningCard() {
     final hasEnrolled = _inProgressCourse != null;
     final course = _inProgressCourse;
-    final accent =
-        hasEnrolled ? _getCourseColor(course!, 0) : IosTheme.primaryBlue;
+    final accent = hasEnrolled
+        ? _getCourseColor(course!, 0)
+        : IosTheme.primaryBlue;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -821,8 +936,8 @@ class _HomeContentState extends State<HomeContent> {
                                 hasEnrolled
                                     ? course!.title
                                     : (_isLoggedIn
-                                        ? 'No Enrolled Courses Yet'
-                                        : 'Explore Courses & Mock Tests'),
+                                          ? 'No Enrolled Courses Yet'
+                                          : 'Explore Courses & Mock Tests'),
                                 style: const TextStyle(
                                   fontSize: 15.5,
                                   fontWeight: FontWeight.w700,
@@ -926,8 +1041,8 @@ class _HomeContentState extends State<HomeContent> {
           final subtitle = course.shortDescription?.isNotEmpty == true
               ? course.shortDescription!
               : (course.price <= 0
-                  ? 'Free enrollment • Start learning now'
-                  : '₹${course.price.toStringAsFixed(0)} • Complete Syllabus');
+                    ? 'Free enrollment • Start learning now'
+                    : '₹${course.price.toStringAsFixed(0)} • Complete Syllabus');
 
           return CupertinoButton(
             padding: EdgeInsets.zero,
@@ -1034,13 +1149,104 @@ class _HomeContentState extends State<HomeContent> {
           width: isSelected ? 18 : 6,
           height: 6,
           decoration: BoxDecoration(
-            color: isSelected
-                ? IosTheme.primaryBlue
-                : const Color(0xFFD1D1D6),
+            color: isSelected ? IosTheme.primaryBlue : const Color(0xFFD1D1D6),
             borderRadius: BorderRadius.circular(3),
           ),
         );
       }),
+    );
+  }
+
+  Widget _buildCompanyPromoBanner() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const IosSectionLabel('Powered By'),
+          IosGroupedCard(
+            children: [
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    Navigator.push(
+                      context,
+                      CupertinoPageRoute(
+                        builder: (_) => const CompanyInfoScreen(),
+                      ),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(14),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: IosTheme.primaryBlue,
+                            borderRadius: BorderRadius.circular(11),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'CIS',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'CIS Complete It Solution',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: IosTheme.labelPrimary,
+                                  letterSpacing: -0.2,
+                                ),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'Deepak Acharya • 5-D-130 JNV Colony, Bikaner',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: IosTheme.labelTertiary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Icon(
+                          CupertinoIcons.chevron_right,
+                          size: 15,
+                          color: Color(0xFFC7C7CC),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -1374,187 +1580,183 @@ class _HomeContentState extends State<HomeContent> {
                   ),
                 )
               else
-                ...List.generate(
-                  _courses.length > 5 ? 5 : _courses.length,
-                  (index) {
-                    final course = _courses[index];
-                    final isLast = index ==
-                        ((_courses.length > 5 ? 5 : _courses.length) - 1);
-                    final color = _getCourseColor(course, index);
-                    final icon = _getCourseIcon(course);
-                    final priceText = course.price <= 0
-                        ? 'FREE'
-                        : '₹${course.price.toStringAsFixed(0)}';
-                    final tagText = course.examBoard?.name ??
-                        (course.price <= 0 ? 'Free Access' : 'Course');
-                    final subtitleText =
-                        course.shortDescription?.isNotEmpty == true
-                            ? course.shortDescription!
-                            : (course.description.isNotEmpty
-                                ? course.description
-                                : 'Syllabus, notes & video lectures');
-                    final metaText = course.subjects != null &&
-                            course.subjects!.isNotEmpty
-                        ? '${course.subjects!.length} subjects'
-                        : (course.totalVideos != null &&
-                                course.totalVideos! > 0
+                ...List.generate(_courses.length > 5 ? 5 : _courses.length, (
+                  index,
+                ) {
+                  final course = _courses[index];
+                  final isLast =
+                      index ==
+                      ((_courses.length > 5 ? 5 : _courses.length) - 1);
+                  final color = _getCourseColor(course, index);
+                  final icon = _getCourseIcon(course);
+                  final priceText = course.price <= 0
+                      ? 'FREE'
+                      : '₹${course.price.toStringAsFixed(0)}';
+                  final tagText =
+                      course.examBoard?.name ??
+                      (course.price <= 0 ? 'Free Access' : 'Course');
+                  final subtitleText =
+                      course.shortDescription?.isNotEmpty == true
+                      ? course.shortDescription!
+                      : (course.description.isNotEmpty
+                            ? course.description
+                            : 'Syllabus, notes & video lectures');
+                  final metaText =
+                      course.subjects != null && course.subjects!.isNotEmpty
+                      ? '${course.subjects!.length} subjects'
+                      : (course.totalVideos != null && course.totalVideos! > 0
                             ? '${course.totalVideos} videos'
                             : 'Full Course');
 
-                    return Column(
-                      children: [
-                        Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () {
-                              HapticFeedback.lightImpact();
-                              Navigator.push(
-                                context,
-                                CupertinoPageRoute(
-                                  builder: (_) =>
-                                      CourseDetailScreen(course: course),
-                                ),
-                              ).then(
-                                (_) => _loadAllHomeData(showSpinner: false),
-                              );
-                            },
-                            child: Padding(
-                              padding: const EdgeInsets.all(14),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 44,
-                                    height: 44,
-                                    decoration: BoxDecoration(
-                                      color: color.withValues(alpha: 0.12),
-                                      borderRadius: BorderRadius.circular(11),
-                                    ),
-                                    child: Center(
-                                      child: Icon(icon, color: color, size: 22),
-                                    ),
+                  return Column(
+                    children: [
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () {
+                            HapticFeedback.lightImpact();
+                            Navigator.push(
+                              context,
+                              CupertinoPageRoute(
+                                builder: (_) =>
+                                    CourseDetailScreen(course: course),
+                              ),
+                            ).then((_) => _loadAllHomeData(showSpinner: false));
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    color: color.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(11),
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: Text(
-                                                course.title,
-                                                style: const TextStyle(
-                                                  fontSize: 14.5,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: IosTheme.labelPrimary,
-                                                  letterSpacing: -0.2,
-                                                ),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
+                                  child: Center(
+                                    child: Icon(icon, color: color, size: 22),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              course.title,
+                                              style: const TextStyle(
+                                                fontSize: 14.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: IosTheme.labelPrimary,
+                                                letterSpacing: -0.2,
                                               ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
                                             ),
-                                            const SizedBox(width: 8),
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                horizontal: 7,
-                                                vertical: 2.5,
-                                              ),
-                                              decoration: BoxDecoration(
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 7,
+                                              vertical: 2.5,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: course.price <= 0
+                                                  ? IosTheme.systemGreen
+                                                        .withValues(alpha: 0.12)
+                                                  : IosTheme.groupedBg,
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              priceText,
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w700,
                                                 color: course.price <= 0
                                                     ? IosTheme.systemGreen
-                                                        .withValues(alpha: 0.12)
-                                                    : IosTheme.groupedBg,
+                                                    : IosTheme.primaryBlue,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        subtitleText,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: IosTheme.labelTertiary,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Row(
+                                        children: [
+                                          Text(
+                                            metaText,
+                                            style: const TextStyle(
+                                              fontSize: 11.5,
+                                              color: IosTheme.labelTertiary,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                          const Spacer(),
+                                          Flexible(
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 2,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: color.withValues(
+                                                  alpha: 0.1,
+                                                ),
                                                 borderRadius:
-                                                    BorderRadius.circular(6),
+                                                    BorderRadius.circular(4),
                                               ),
                                               child: Text(
-                                                priceText,
+                                                tagText,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
                                                 style: TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: course.price <= 0
-                                                      ? IosTheme.systemGreen
-                                                      : IosTheme.primaryBlue,
+                                                  fontSize: 9.5,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: color,
                                                 ),
                                               ),
                                             ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 3),
-                                        Text(
-                                          subtitleText,
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            color: IosTheme.labelTertiary,
-                                            fontWeight: FontWeight.w500,
                                           ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        const SizedBox(height: 6),
-                                        Row(
-                                          children: [
-                                            Text(
-                                              metaText,
-                                              style: const TextStyle(
-                                                fontSize: 11.5,
-                                                color: IosTheme.labelTertiary,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                            const Spacer(),
-                                            Flexible(
-                                              child: Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 6,
-                                                  vertical: 2,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: color.withValues(
-                                                    alpha: 0.1,
-                                                  ),
-                                                  borderRadius:
-                                                      BorderRadius.circular(4),
-                                                ),
-                                                child: Text(
-                                                  tagText,
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: TextStyle(
-                                                    fontSize: 9.5,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: color,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
+                                        ],
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                        if (!isLast)
-                          const Padding(
-                            padding: EdgeInsets.only(left: 70),
-                            child: Divider(
-                              height: 0.5,
-                              thickness: 0.5,
-                              color: IosTheme.separator,
-                            ),
+                      ),
+                      if (!isLast)
+                        const Padding(
+                          padding: EdgeInsets.only(left: 70),
+                          child: Divider(
+                            height: 0.5,
+                            thickness: 0.5,
+                            color: IosTheme.separator,
                           ),
-                      ],
-                    );
-                  },
-                ),
+                        ),
+                    ],
+                  );
+                }),
             ],
           ),
         ],

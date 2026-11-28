@@ -5,6 +5,7 @@ import '../registration/login_screen.dart';
 import '../services/api_service.dart';
 import '../widgets/ios_components.dart';
 import 'change_password_screen.dart';
+import 'company_info_screen.dart';
 import 'edit_profile_screen.dart';
 import 'purchase_history_screen.dart';
 import 'test_series/test_history_screen.dart';
@@ -91,9 +92,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     showCupertinoDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CupertinoActivityIndicator(radius: 16),
-      ),
+      builder: (context) =>
+          const Center(child: CupertinoActivityIndicator(radius: 16)),
     );
 
     try {
@@ -141,8 +141,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: _isLoading
             ? const Center(child: CupertinoActivityIndicator(radius: 14))
             : _errorMessage != null
-                ? _buildErrorView()
-                : _buildProfileContent(),
+            ? _buildErrorView()
+            : _buildProfileContent(),
       ),
     );
   }
@@ -162,9 +162,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         parent: BouncingScrollPhysics(),
       ),
       slivers: [
-        CupertinoSliverRefreshControl(
-          onRefresh: _loadUserProfile,
-        ),
+        CupertinoSliverRefreshControl(onRefresh: _loadUserProfile),
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
@@ -228,21 +226,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     label: 'Email Address',
                     value: email.isNotEmpty ? email : 'Not provided',
                   ),
-                  const Divider(height: 1, indent: 48, color: Color(0xFFE5E5EA)),
+                  const Divider(
+                    height: 1,
+                    indent: 48,
+                    color: Color(0xFFE5E5EA),
+                  ),
                   _buildDetailRow(
                     icon: CupertinoIcons.phone_fill,
                     iconColor: const Color(0xFF34C759),
                     label: 'Phone Number',
                     value: phone.isNotEmpty ? phone : 'Not provided',
                   ),
-                  const Divider(height: 1, indent: 48, color: Color(0xFFE5E5EA)),
+                  const Divider(
+                    height: 1,
+                    indent: 48,
+                    color: Color(0xFFE5E5EA),
+                  ),
                   _buildDetailRow(
                     icon: CupertinoIcons.building_2_fill,
                     iconColor: const Color(0xFFFF9500),
                     label: 'City',
                     value: city,
                   ),
-                  const Divider(height: 1, indent: 48, color: Color(0xFFE5E5EA)),
+                  const Divider(
+                    height: 1,
+                    indent: 48,
+                    color: Color(0xFFE5E5EA),
+                  ),
                   _buildDetailRow(
                     icon: CupertinoIcons.map_pin_ellipse,
                     iconColor: const Color(0xFF5856D6),
@@ -270,7 +280,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       );
                     },
                   ),
-                  const Divider(height: 1, indent: 48, color: Color(0xFFE5E5EA)),
+                  const Divider(
+                    height: 1,
+                    indent: 48,
+                    color: Color(0xFFE5E5EA),
+                  ),
                   _buildActionRow(
                     icon: CupertinoIcons.bag_fill,
                     iconColor: const Color(0xFF34C759),
@@ -310,7 +324,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       }
                     },
                   ),
-                  const Divider(height: 1, indent: 48, color: Color(0xFFE5E5EA)),
+                  const Divider(
+                    height: 1,
+                    indent: 48,
+                    color: Color(0xFFE5E5EA),
+                  ),
                   _buildActionRow(
                     icon: CupertinoIcons.lock_shield_fill,
                     iconColor: const Color(0xFFFF9500),
@@ -325,7 +343,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       );
                     },
                   ),
-                  const Divider(height: 1, indent: 48, color: Color(0xFFE5E5EA)),
+                  const Divider(
+                    height: 1,
+                    indent: 48,
+                    color: Color(0xFFE5E5EA),
+                  ),
                   _buildActionRow(
                     icon: CupertinoIcons.share,
                     iconColor: const Color(0xFF34C759),
@@ -347,10 +369,51 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       );
                     },
                   ),
+                  const Divider(
+                    height: 1,
+                    indent: 48,
+                    color: Color(0xFFE5E5EA),
+                  ),
+                  _buildActionRow(
+                    icon: CupertinoIcons.building_2_fill,
+                    iconColor: IosTheme.primaryBlue,
+                    title: CompanyInfoScreen.companyName,
+                    subtitle:
+                        'Bikaner, Rajasthan • ${CompanyInfoScreen.mobileNumber}',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        CupertinoPageRoute(
+                          builder: (context) => const CompanyInfoScreen(),
+                        ),
+                      );
+                    },
+                  ),
                 ]),
                 const SizedBox(height: 24),
 
-                // 6. Section: Sign Out
+                // 6. Section: Technology Partner
+                _buildSectionHeader('DEVELOPED & POWERED BY'),
+                const SizedBox(height: 8),
+                _buildGroupedCard([
+                  _buildActionRow(
+                    icon: CupertinoIcons.building_2_fill,
+                    iconColor: IosTheme.primaryBlue,
+                    title: 'CIS Complete It Solution',
+                    subtitle: 'Deepak Acharya • Bikaner • 9549813228',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        CupertinoPageRoute(
+                          builder: (context) => const CompanyInfoScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                ]),
+                const SizedBox(height: 24),
+
+                // 7. Section: Sign Out
                 _buildGroupedCard([
                   CupertinoButton(
                     padding: const EdgeInsets.symmetric(
@@ -396,9 +459,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       const SizedBox(height: 2),
                       Text(
                         'Version 1.0.0 (Build 1)',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[500],
+                        style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      ),
+                      const SizedBox(height: 6),
+                      CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        minimumSize: Size.zero,
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            CupertinoPageRoute(
+                              builder: (context) => const CompanyInfoScreen(),
+                            ),
+                          );
+                        },
+                        child: const Text(
+                          'Powered by ${CompanyInfoScreen.companyName}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: IosTheme.primaryBlue,
+                          ),
                         ),
                       ),
                     ],
@@ -426,10 +507,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: const Color(0xFFE5E5EA),
-          width: 1,
-        ),
+        border: Border.all(color: const Color(0xFFE5E5EA), width: 1),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0A000000),
@@ -553,10 +631,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color(0xFFE5E5EA),
-          width: 1,
-        ),
+        border: Border.all(color: const Color(0xFFE5E5EA), width: 1),
         boxShadow: const [
           BoxShadow(
             color: Color(0x06000000),
@@ -565,9 +640,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ],
       ),
-      child: Column(
-        children: children,
-      ),
+      child: Column(children: children),
     );
   }
 
@@ -589,11 +662,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               color: iconColor.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(9),
             ),
-            child: Icon(
-              icon,
-              size: 17,
-              color: iconColor,
-            ),
+            child: Icon(icon, size: 17, color: iconColor),
           ),
           const SizedBox(width: 12),
           Text(
@@ -611,10 +680,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               textAlign: TextAlign.right,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 14,
-                color: Color(0xFF8E8E93),
-              ),
+              style: const TextStyle(fontSize: 14, color: Color(0xFF8E8E93)),
             ),
           ),
         ],
@@ -646,11 +712,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   color: iconColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(9),
                 ),
-                child: Icon(
-                  icon,
-                  size: 17,
-                  color: iconColor,
-                ),
+                child: Icon(icon, size: 17, color: iconColor),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -718,10 +780,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Text(
               _errorMessage ?? 'Please check your internet connection.',
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                color: Color(0xFF8E8E93),
-              ),
+              style: const TextStyle(fontSize: 13, color: Color(0xFF8E8E93)),
             ),
             const SizedBox(height: 16),
             CupertinoButton(

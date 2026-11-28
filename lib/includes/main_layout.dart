@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/course.dart';
 import '../registration/login_screen.dart';
+import '../screens/company_info_screen.dart';
 import '../screens/course_detail_screen.dart';
 import '../screens/purchase_history_screen.dart';
 import '../screens/test_series/test_history_screen.dart';
@@ -381,6 +382,27 @@ class _MainLayoutState extends State<MainLayout> {
                       onTap: () {
                         Navigator.pop(sheetContext);
                         _openProtectedScreen(const PurchaseHistoryScreen());
+                      },
+                    ),
+                    const Divider(
+                      height: 0.5,
+                      indent: 60,
+                      color: IosTheme.separator,
+                    ),
+                    _buildQuickRow(
+                      icon: CupertinoIcons.building_2_fill,
+                      iconColor: IosTheme.primaryBlue,
+                      title: CompanyInfoScreen.companyName,
+                      subtitle:
+                          '${CompanyInfoScreen.ownerName} • ${CompanyInfoScreen.mobileNumber}',
+                      onTap: () {
+                        Navigator.pop(sheetContext);
+                        Navigator.push(
+                          context,
+                          CupertinoPageRoute(
+                            builder: (_) => const CompanyInfoScreen(),
+                          ),
+                        );
                       },
                     ),
                   ],
